@@ -58,7 +58,7 @@ def irrExpSmth(	data
 
 	nu,de=0,0
 	for i in range(len(x)):
-		tmp=(x[i]-x_bar)
+		tmp=x[i]-x_bar
 		nu+=tmp*(y[i]-y_bar)
 		de+=tmp**2
 
@@ -97,7 +97,7 @@ def irrExpSmth(	data
 			pre_S=S_t[t_n]
 			pre_T=T_t[t_n]
 
-		return signal
+	return signal
 
 
 
