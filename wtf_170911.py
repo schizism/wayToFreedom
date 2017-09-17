@@ -128,6 +128,7 @@ def rollingWindow(	data
 	#-------------------------------
 	#we are assuming input data is a list of json object
 	#this is following https://docs.google.com/document/d/1XCX_g96ro82I-nFQC6RHXKQkDu2uP1WrXbPvD64qe54/edit#
+	#fixed check interval without smoothing will result in very volatile signals
 	#-------------------------------
 	import datetime
 	import time
