@@ -23,8 +23,8 @@ def irrExpSmth(	data
 	#basic sanity checks
 	if data==None or len(data)<=5:
 		raise ValueError("erroneous input data: "+str(len(data)))
-	if checkInterval==None or (not isinstance(checkInterval,int)):
-		raise ValueError('checkInterval must be a int')
+	if checkInterval==None:
+		raise ValueError('checkInterval must be a number')
 	if buy_threshold==None or (not 0<buy_threshold):
 		raise ValueError('buy_threshold >0')
 	if sell_threshold==None or (not sell_threshold<0):
@@ -83,21 +83,83 @@ def irrExpSmth(	data
 		T_t[t_n]=gamma_t[t_n]*np.divide(S_t[t_n]-S_t[t_n-1],df['ts'][t_n]-df['ts'][t_n-1])+(1-gamma_t[t_n])*T_t[t_n-1]
 		
 		#detecting signal
-		if df['ts'][t_n]-time_tic>=checkInterval:
-			if df['ts'][t_n]-time_tic>=5*checkInterval:
-				print("warning")
-			#print(df['T'][t_n],df['ts'][t_n]-time_tic,np.divide(S_t[t_n]-pre_S,pre_S))
-			if np.divide(S_t[t_n]-pre_S,pre_S)>=buy_threshold:
-				signal.append((df['T'][t_n],1))
-			elif np.divide(S_t[t_n]-pre_S,pre_S)<=sell_threshold:
-				signal.append((df['T'][t_n],-1))
-			else:
-				pass
-			time_tic=df['ts'][t_n]
-			pre_S=S_t[t_n]
-			pre_T=T_t[t_n]
+		# if df['ts'][t_n]-time_tic>=checkInterval:
+		# 	if df['ts'][t_n]-time_tic>=5*checkInterval:
+		# 		print("warning")
+		# 	#print(df['T'][t_n],df['ts'][t_n]-time_tic,np.divide(S_t[t_n]-pre_S,pre_S))
+		# 	if np.divide(S_t[t_n]-pre_S,pre_S)>=buy_threshold:
+		# 		signal.append((df['T'][t_n],1))
+		# 	elif np.divide(S_t[t_n]-pre_S,pre_S)<=sell_threshold:
+		# 		signal.append((df['T'][t_n],-1))
+		# 	else:
+		# 		pass
+		# 	time_tic=df['ts'][t_n]
+		# 	pre_S=S_t[t_n]
+		# 	pre_T=T_t[t_n]
 
-	return signal
+	return (S_t,T_t)
+
+
+def buySig(pre,post,threshold=1,weights={'V':0.8,'P':0.2}):
+	if pre==None or post==None:
+		raise ValueError()
+	if sum(weights.values())!=1:
+		raise ValueError('weights must be sum to 1')
+	if threshold==None or not (0<threshold):
+		raise ValueError('threshold: '+str(threshold))
+	if ((post["V"]-pre["V"])/pre["V"])*weights['V']+((post["P"]-pre["P"])/pre["P"])*weights['P']>=threshold:
+		return True
+	return False
+
+def sellSig(cur,purPrice,threshold=-0.05):
+	if cur==None or purPrice==None:
+		raise ValueError()
+	if threshold==None or not (threshold<0):
+		raise ValueError('threshold: '+str(threshold))
+	if (cur['P']-purPrice)/purPrice<=threshold:
+		return True
+	return False
+
+def rollingWindow(data
+			,checkInterval=5	#Note, the unit here is min
+			,warning_time_gap=3
+			):
+	#-------------------------------
+	#we are assuming input data is a list of json object
+	#this is following https://docs.google.com/document/d/1XCX_g96ro82I-nFQC6RHXKQkDu2uP1WrXbPvD64qe54/edit#
+	#-------------------------------
+import datetime
+import time
+import numpy as np
+import pandas as pd
+import collections as c
+#basic sanity check
+if data==None or len(data)<=5:
+	raise ValueError("erroneous input data: "+str(len(data)))
+if checkInterval==None:
+	raise ValueError('checkInterval must be a number')
+if warning_time_gap==None or (not 0<warning_time_gap):
+	raise ValueError('warning_time_gap >0')
+#sort data to make sure its time ascending
+data.sort(key=lambda x:x['T'])
+
+#initialization
+rw,buySignal,sellSignal=c.deque(),[],[]
+#start scanning
+for i in range(len(data)):
+	#print rw
+	rw.append({'V':data[i]['V'],'P':data[i]['C'],'ts':time.mktime(datetime.datetime.strptime(data[i]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())})
+	# if sellSig(rw[-1],purPrice=,threshold=-0.05):
+	# 	sellSignal.append(data[i])
+	pre,post=rw[0],rw[-1]
+	if post['ts']-pre['ts']>=checkInterval*60:
+		if post['ts']-pre['ts']>=warning_time_gap*checkInterval*60:
+			print('warning')
+		if buySig(pre,post):
+			buySignal.append(post)
+		tmp=rw.popleft()
+
+
 
 
 
@@ -113,6 +175,14 @@ def irrExpSmth(	data
 # df['S_t'].plot(ax=ax)
 # plt.show()
 
+
+# df = pd.DataFrame(data)
+# df['ts']=df['T'].apply(lambda x:(time.mktime(datetime.datetime.strptime(x,"%Y-%m-%dT%H:%M:%S").timetuple())))
+# df['buy']=buySignal
+
+# ax=df['V'].plot()
+# df['buy'].plot(ax=ax)
+# plt.show()
 
 
 
