@@ -120,44 +120,46 @@ def sellSig(cur,purPrice,threshold=-0.05):
 		return True
 	return False
 
-def rollingWindow(data
-			,checkInterval=5	#Note, the unit here is min
-			,warning_time_gap=3
-			):
+def rollingWindow(	data
+					,checkInterval=5	#Note, the unit here is min
+					,warning_time_gap=3
+				):
 	#-------------------------------
 	#we are assuming input data is a list of json object
 	#this is following https://docs.google.com/document/d/1XCX_g96ro82I-nFQC6RHXKQkDu2uP1WrXbPvD64qe54/edit#
 	#-------------------------------
-import datetime
-import time
-import numpy as np
-import pandas as pd
-import collections as c
-#basic sanity check
-if data==None or len(data)<=5:
-	raise ValueError("erroneous input data: "+str(len(data)))
-if checkInterval==None:
-	raise ValueError('checkInterval must be a number')
-if warning_time_gap==None or (not 0<warning_time_gap):
-	raise ValueError('warning_time_gap >0')
-#sort data to make sure its time ascending
-data.sort(key=lambda x:x['T'])
+	import datetime
+	import time
+	import numpy as np
+	import pandas as pd
+	import collections as c
+	#basic sanity check
+	if data==None or len(data)<=5:
+		raise ValueError("erroneous input data: "+str(len(data)))
+	if checkInterval==None:
+		raise ValueError('checkInterval must be a number')
+	if warning_time_gap==None or (not 0<warning_time_gap):
+		raise ValueError('warning_time_gap >0')
+	#sort data to make sure its time ascending
+	data.sort(key=lambda x:x['T'])
 
-#initialization
-rw,buySignal,sellSignal=c.deque(),[],[]
-#start scanning
-for i in range(len(data)):
-	#print rw
-	rw.append({'V':data[i]['V'],'P':data[i]['C'],'ts':time.mktime(datetime.datetime.strptime(data[i]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())})
-	# if sellSig(rw[-1],purPrice=,threshold=-0.05):
-	# 	sellSignal.append(data[i])
-	pre,post=rw[0],rw[-1]
-	if post['ts']-pre['ts']>=checkInterval*60:
-		if post['ts']-pre['ts']>=warning_time_gap*checkInterval*60:
-			print('warning')
-		if buySig(pre,post):
-			buySignal.append(post)
-		tmp=rw.popleft()
+	#initialization
+	rw,buySignal,sellSignal=c.deque(),[],[]
+	#start scanning
+	for i in range(len(data)):
+		#print rw
+		rw.append({'V':data[i]['V'],'P':data[i]['C'],'ts':time.mktime(datetime.datetime.strptime(data[i]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())})
+		# if sellSig(rw[-1],purPrice=,threshold=-0.05):
+		# 	sellSignal.append(data[i])
+		pre,post=rw[0],rw[-1]
+		if post['ts']-pre['ts']>=checkInterval*60:
+			if post['ts']-pre['ts']>=warning_time_gap*checkInterval*60:
+				#logger here
+				print('warning')
+			if buySig(pre,post):
+				buySignal.append(post)
+			tmp=rw.popleft()
+	return (buySignal,sellSignal)
 
 
 
