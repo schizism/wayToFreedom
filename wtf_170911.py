@@ -1,5 +1,5 @@
 #---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-#170912 irrExpSmth funciton is used to do the irregular time series exponential smoothing then check if there are buy signal
+#170912 irrExpSmth funciton is used to do the irregular time series exponential smoothing
 #170916 add partial logic
 #---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -7,7 +7,7 @@
 #---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #
 #---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-def irrExpSmth(	data
+def irrExpSmth(data
 				,checkInterval=5
 				,buy_threshold=0.1
 				,sell_threshold=-0.1
@@ -108,8 +108,9 @@ def buySig(pre,post,threshold=1,weights={'V':0.8,'P':0.2}):
 		raise ValueError('weights must be sum to 1')
 	if threshold==None or not (0<threshold):
 		raise ValueError('threshold: '+str(threshold))
-	if ((post["V"]-pre["V"])/pre["V"])*weights['V']+((post["P"]-pre["P"])/pre["P"])*weights['P']>=threshold:
-		return True
+	if post["P"]-pre["P"]>0:
+		if ((post["V"]-pre["V"])/pre["V"])*weights['V']+((post["P"]-pre["P"])/pre["P"])*weights['P']>=threshold:
+			return True
 	return False
 
 def sellSig(cur,purPrice,threshold=-0.05):
@@ -121,14 +122,12 @@ def sellSig(cur,purPrice,threshold=-0.05):
 		return True
 	return False
 
-def rollingWindow(	data
-					,checkInterval=5	#Note, the unit here is min
-					,warning_time_gap=3
-				):
+def rollingWindow(data,checkInterval=60,warning_time_gap=3):
 	#-------------------------------
 	#we are assuming input data is a list of json object
 	#this is following https://docs.google.com/document/d/1XCX_g96ro82I-nFQC6RHXKQkDu2uP1WrXbPvD64qe54/edit#
 	#fixed check interval without smoothing will result in very volatile signals
+	#Note, checkInterval unit is min
 	#-------------------------------
 	import datetime
 	import time
@@ -146,11 +145,10 @@ def rollingWindow(	data
 	data.sort(key=lambda x:x['T'])
 
 	#initialization
-	rw,buySignal,sellSignal=c.deque(),[],[]
+	rw,buySignal,sellSignal=c.deque(),[0]*len(data),[]
 	#start scanning
 	for i in range(len(data)):
-		#print rw
-		rw.append({'V':data[i]['V'],'P':data[i]['C'],'ts':time.mktime(datetime.datetime.strptime(data[i]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())})
+		rw.append({'V':data[i]['V'],'P':data[i]['C'],'ts':time.mktime(datetime.datetime.strptime(data[i]['T'],"%Y-%m-%dT%H:%M:%S").timetuple()),'T':data[i]['T']})
 		# if sellSig(rw[-1],purPrice=,threshold=-0.05):
 		# 	sellSignal.append(data[i])
 		pre,post=rw[0],rw[-1]
@@ -159,9 +157,22 @@ def rollingWindow(	data
 				#logger here
 				print('warning')
 			if buySig(pre,post):
-				buySignal.append(post)
-			tmp=rw.popleft()
+				#buySignal.append(post)
+				buySignal[i]=post['V']
+			while len(rw)>0 and rw[-1]['ts']-rw[0]['ts']>=checkInterval*60:
+				tmp=rw.popleft()
 	return (buySignal,sellSignal)
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -180,13 +191,15 @@ def rollingWindow(	data
 # plt.show()
 
 
-# df = pd.DataFrame(data)
-# df['ts']=df['T'].apply(lambda x:(time.mktime(datetime.datetime.strptime(x,"%Y-%m-%dT%H:%M:%S").timetuple())))
-# df['buy']=buySignal
+df = pd.DataFrame(data)
+df['ts']=df['T'].apply(lambda x:(time.mktime(datetime.datetime.strptime(x,"%Y-%m-%dT%H:%M:%S").timetuple())))
+df['buy']=buySignal
 
-# ax=df['V'].plot()
-# df['buy'].plot(ax=ax)
-# plt.show()
+ax=df['V'].plot()
+df['buy'].plot(ax=ax)
+# df['CP']=df['C']*1000000
+# df['CP']
+plt.show()
 
 
 
