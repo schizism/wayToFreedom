@@ -101,33 +101,44 @@ def irrExpSmth(data
 	return (S_t,T_t)
 
 
-def buySig(pre,post,threshold=1,weights={'V':0.8,'P':0.2}):
-	if pre==None or post==None:
+
+
+def buySig(currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum,preRWVolumeSum=preRWVolumeSum,twentyFourHourVolume=twentyFourHourVolume,weights={'V':0.8,'P':0.2},thresholds={'V':1,'twentyFourHourVolume':300}):
+	if currPrice==None or prePrice==None or twentyFourHourVolume==None:
+		raise ValueError()
+	if currRWVolumeSum==None or preRWVolumeSum==None or currRWVolumeSum<=0 or preRWVolumeSum<=0:
 		raise ValueError()
 	if sum(weights.values())!=1:
 		raise ValueError('weights must be sum to 1')
-	if threshold==None or not (0<threshold):
-		raise ValueError('threshold: '+str(threshold))
-	if post["P"]-pre["P"]>0:
-		if ((post["V"]-pre["V"])/pre["V"])*weights['V']+((post["P"]-pre["P"])/pre["P"])*weights['P']>=threshold:
-			return True
-	return False
+	if thresholds==None:
+		raise ValueError('threshold: '+str(thresholds))
+	if currPrice<prePrice:
+		return 0
+	if twentyFourHourVolume<thresholds['twentyFourHourVolume']:
+		return 0
+	return (currRWVolumeSum-preRWVolumeSum)/preRWVolumeSum*weights['V']+(currPrice-prePrice)/prePrice*weights['P']
 
-def sellSig(cur,purPrice,threshold=-0.05):
-	if cur==None or purPrice==None:
+
+def sellSig(purchasePrice=purchasePrice,currPrice=currPrice,thresholds={'stopLoss':-0.1,'stopGain':0.2}):
+	if purchasePrice==None or currPrice==None or thresholds==None:
 		raise ValueError()
-	if threshold==None or not (threshold<0):
-		raise ValueError('threshold: '+str(threshold))
-	if (cur['P']-purPrice)/purPrice<=threshold:
-		return True
-	return False
+	if purchasePrice<0 or currPrice<0:
+		raise ValueError()
+	if (currPrice-purchasePrice)/purchasePrice<=thresholds['stopLoss']:
+		return np.inf
+	if (currPrice-purchasePrice)/purchasePrice>=thresholds['stopGain']:
+		return np.inf
+	return 0
 
-def rollingWindow(data,checkInterval=60,warning_time_gap=3):
+
+
+def rollingWindow(data,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=5):
 	#-------------------------------
+	#this function is used to deal with singal trading pair, e.g. bit-omg
+	#the time units for rwLength and checkTimeInterval and inputTimeInterval are min 
 	#we are assuming input data is a list of json object
 	#this is following https://docs.google.com/document/d/1XCX_g96ro82I-nFQC6RHXKQkDu2uP1WrXbPvD64qe54/edit#
 	#fixed check interval without smoothing will result in very volatile signals
-	#Note, checkInterval unit is min
 	#-------------------------------
 	import datetime
 	import time
@@ -137,33 +148,49 @@ def rollingWindow(data,checkInterval=60,warning_time_gap=3):
 	#basic sanity check
 	if data==None or len(data)<=5:
 		raise ValueError("erroneous input data: "+str(len(data)))
-	if checkInterval==None:
-		raise ValueError('checkInterval must be a number')
-	if warning_time_gap==None or (not 0<warning_time_gap):
-		raise ValueError('warning_time_gap >0')
+	if warningTimeGap==None or (not 0<warningTimeGap):
+		raise ValueError('warningTimeGap >0')
 	#sort data to make sure its time ascending
 	data.sort(key=lambda x:x['T'])
 
+	if maxLatency==None or time.time()-time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())>maxLatency:
+		raise ValueError('last update timestamp is too old: '+str(data[-1]['T']))
+	if time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())-time.mktime(datetime.datetime.strptime(data[0]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())<24*60*60:
+		raise ValueError('history not exceeding 24h'+str(data[-1]['T'])+' '+str(data[0]['T']))
+
 	#initialization
-	rw,buySignal,sellSignal=c.deque(),[0]*len(data),[]
-	#start scanning
-	for i in range(len(data)):
-		rw.append({'V':data[i]['V'],'P':data[i]['C'],'ts':time.mktime(datetime.datetime.strptime(data[i]['T'],"%Y-%m-%dT%H:%M:%S").timetuple()),'T':data[i]['T']})
-		# if sellSig(rw[-1],purPrice=,threshold=-0.05):
-		# 	sellSignal.append(data[i])
-		pre,post=rw[0],rw[-1]
-		if post['ts']-pre['ts']>=checkInterval*60:
-			if post['ts']-pre['ts']>=warning_time_gap*checkInterval*60:
-				#logger here
-				print('warning')
-			if buySig(pre,post):
-				#buySignal.append(post)
-				buySignal[i]=post['V']
-			while len(rw)>0 and rw[-1]['ts']-rw[0]['ts']>=checkInterval*60:
-				tmp=rw.popleft()
-	return (buySignal,sellSignal)
+	rw,currPrice,prePrice=c.deque(),data[-1]['C'],None
+	currRWtimeFrame,preRWtimeFrame={'start':time.time()-rwLength*60,'end':time.time()},{'start':time.time()-checkTimeInterval*60-rwLength*60,'end':time.time()-checkTimeInterval*60},
+	currRWtimeWriteFlag,preRWtimeWriteFlag=False,False
+	stopTime=currRWtimeFrame['end']-24*60*60
+	currRWVolumeSum,preRWVolumeSum,twentyFourHourVolume=0,0,0
+	preTs=None
 
 
+	for i in range(len(data)-1,-1,-1):
+		ts=time.mktime(datetime.datetime.strptime(data[i]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
+		if preTs!=None and preTs-ts>warningTimeGap*60:
+			print('warning, time interval exceeds warningTimeGap '+str(data[i])+' '+str(data[i+1]))
+		if ts<stopTime:
+			break
+		if prePrice==None and ts<=currRWtimeFrame['end']-60*60:
+			prePrice=data[i]['C']
+		if currRWtimeFrame['start']<=ts<=currRWtimeFrame['end']:
+			currRWVolumeSum+=data[i]['V']
+			currRWtimeWriteFlag=True
+		if preRWtimeFrame['start']<=ts<=preRWtimeFrame['end']:
+			preRWVolumeSum+=data[i]['V']
+			preRWtimeWriteFlag=True
+		if stopTime<=ts<=currRWtimeFrame['end']:
+			twentyFourHourVolume+=data[i]['V']
+		preTs=ts
+
+	if not (currRWtimeWriteFlag and preRWtimeWriteFlag):
+		raise ValueError('not writing')
+	#read holding position here
+	#purchasePrice,
+
+	return {'buySig':buySig(currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum,preRWVolumeSum=preRWVolumeSum,twentyFourHourVolume=twentyFourHourVolume,weights={'V':0.8,'P':0.2},thresholds={'V':1}),'sellSig':sellSig(purchasePrice=purchasePrice,currPrice=currPrice,thresholds={'stopLoss':0.1,'stopGain':0.2})}
 
 
 
