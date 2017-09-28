@@ -103,7 +103,7 @@ def irrExpSmth(data
 
 
 
-def buySig(currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum,preRWVolumeSum=preRWVolumeSum,twentyFourHourVolume=twentyFourHourVolume,weights={'V':0.8,'P':0.2},thresholds={'V':1,'twentyFourHourVolume':300}):
+def buySig(currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum,preRWVolumeSum=preRWVolumeSum,twentyFourHourVolume=twentyFourHourVolume,weights={'V':0.8,'P':0.2},thresholds={'V':1,'P':0.05,'twentyFourHourVolume':300}):
 	if currPrice==None or prePrice==None or twentyFourHourVolume==None:
 		raise ValueError()
 	if currRWVolumeSum==None or preRWVolumeSum==None or currRWVolumeSum<=0 or preRWVolumeSum<=0:
@@ -116,7 +116,7 @@ def buySig(currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum
 		return 0
 	if twentyFourHourVolume<thresholds['twentyFourHourVolume']:
 		return 0
-	return (currRWVolumeSum-preRWVolumeSum)/preRWVolumeSum*weights['V']+(currPrice-prePrice)/prePrice*weights['P']
+	return ((currRWVolumeSum-preRWVolumeSum)/preRWVolumeSum)/thresholds['V']*weights['V']+((currPrice-prePrice)/prePrice)/thresholds['P']*weights['P']
 
 
 def sellSig(purchasePrice=purchasePrice,currPrice=currPrice,thresholds={'stopLoss':-0.1,'stopGain':0.2}):
@@ -132,7 +132,7 @@ def sellSig(purchasePrice=purchasePrice,currPrice=currPrice,thresholds={'stopLos
 
 
 
-def rollingWindow(data,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=5):
+def rollingWindow(data,rwTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=5):
 	#-------------------------------
 	#this function is used to deal with singal trading pair, e.g. bit-omg
 	#the time units for rwLength and checkTimeInterval and inputTimeInterval are min 
@@ -169,8 +169,13 @@ def rollingWindow(data,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLate
 
 	for i in range(len(data)-1,-1,-1):
 		ts=time.mktime(datetime.datetime.strptime(data[i]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
-		if preTs!=None and preTs-ts>warningTimeGap*60:
-			print('warning, time interval exceeds warningTimeGap '+str(data[i])+' '+str(data[i+1]))
+		if preTs!=None:
+			if preTs-ts>warningTimeGap*60:
+				print('warning, time interval exceeds warningTimeGap '+str(data[i])+' '+str(data[i+1]))
+			if preTs-ts<rwTimeInterval*60:
+				print(str(data[i-1]))
+				print(str(data[i]))
+				raise ValueError('data timestamp overlapping')
 		if ts<stopTime:
 			break
 		if prePrice==None and ts<=currRWtimeFrame['end']-60*60:
