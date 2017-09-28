@@ -132,7 +132,7 @@ def sellSig(purchasePrice=purchasePrice,currPrice=currPrice,thresholds={'stopLos
 
 
 
-def rollingWindow(data,rwTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=5):
+def rollingWindow(data,histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=5):
 	#-------------------------------
 	#this function is used to deal with singal trading pair, e.g. bit-omg
 	#the time units for rwLength and checkTimeInterval and inputTimeInterval are min 
@@ -150,6 +150,8 @@ def rollingWindow(data,rwTimeInterval=1,rwLength=60,checkTimeInterval=5,warningT
 		raise ValueError("erroneous input data: "+str(len(data)))
 	if warningTimeGap==None or (not 0<warningTimeGap):
 		raise ValueError('warningTimeGap >0')
+	if histTimeInterval>=warningTimeGap:
+		raise ValueError('histTimeInterval: '+str(histTimeInterval)+'must be less than warningTimeGap: '+str(warningTimeGap))
 	#sort data to make sure its time ascending
 	data.sort(key=lambda x:x['T'])
 
@@ -172,7 +174,7 @@ def rollingWindow(data,rwTimeInterval=1,rwLength=60,checkTimeInterval=5,warningT
 		if preTs!=None:
 			if preTs-ts>warningTimeGap*60:
 				print('warning, time interval exceeds warningTimeGap '+str(data[i])+' '+str(data[i+1]))
-			if preTs-ts<rwTimeInterval*60:
+			if preTs-ts<histTimeInterval*60:
 				print(str(data[i-1]))
 				print(str(data[i]))
 				raise ValueError('data timestamp overlapping')
