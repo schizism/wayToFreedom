@@ -39,8 +39,8 @@ def irrExpSmth(data
 
 	import datetime
 	import time
-	import numpy as np
-	import pandas as pd
+	#import numpy as np
+	#import pandas as pd
 
 	#sort data to make sure its time ascending
 	data.sort(key=lambda x:x['T'])
@@ -103,36 +103,60 @@ def irrExpSmth(data
 
 
 
-def buySig(currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum,preRWVolumeSum=preRWVolumeSum,twentyFourHourVolume=twentyFourHourVolume,weights={'V':0.8,'P':0.2},thresholds={'V':1,'P':0.05,'twentyFourHourVolume':300}):
+def buySig(tradingPair,currPrice,prePrice,currRWVolumeSum,preRWVolumeSum,twentyFourHourVolume,weights={'V':0.8,'P':0.2},thresholds={'V':1,'P':0.05,'twentyFourHourVolume':300}):
 	if currPrice==None or prePrice==None or twentyFourHourVolume==None:
-		raise ValueError()
+		print(currPrice)
+		print(prePrice)
+		print(twentyFourHourVolume)
+		raise ValueError('erroneous currPrice OR prePrice OR twentyFourHourVolume')
 	if currRWVolumeSum==None or preRWVolumeSum==None or currRWVolumeSum<=0 or preRWVolumeSum<=0:
 		raise ValueError()
 	if sum(weights.values())!=1:
 		raise ValueError('weights must be sum to 1')
 	if thresholds==None:
 		raise ValueError('threshold: '+str(thresholds))
-	if currPrice<prePrice:
-		return 0
+	# if currPrice<prePrice:
+	# 	print(tradingPair+' has a lower price (curr:'+str(currPrice)+') vs (pre:'+str(prePrice)+')')
+	# 	return None
 	if twentyFourHourVolume<thresholds['twentyFourHourVolume']:
-		return 0
-	return ((currRWVolumeSum-preRWVolumeSum)/preRWVolumeSum)/thresholds['V']*weights['V']+((currPrice-prePrice)/prePrice)/thresholds['P']*weights['P']
+		print(tradingPair+' twentyFourHourVolume < '+str(thresholds['twentyFourHourVolume']))
+		return None
+	vThresholdValue=(currRWVolumeSum-preRWVolumeSum)/preRWVolumeSum
+	pThresholdValue=(currPrice-prePrice)/prePrice
+	if vThresholdValue<thresholds['V']:
+		print(tradingPair+' not passing Volume threshold ('+str(vThresholdValue)+' vs '+str(thresholds['V'])+')')
+		return None
+	if pThresholdValue<thresholds['P']:
+		print(tradingPair+' not passing price threshold ('+str(pThresholdValue)+' vs '+str(thresholds['P'])+')')
+		return None
+	return vThresholdValue/thresholds['V']*weights['V']+pThresholdValue/thresholds['P']*weights['P']
 
 
-def sellSig(purchasePrice=purchasePrice,currPrice=currPrice,thresholds={'stopLoss':-0.1,'stopGain':0.2}):
-	if purchasePrice==None or currPrice==None or thresholds==None:
-		raise ValueError()
-	if purchasePrice<0 or currPrice<0:
-		raise ValueError()
-	if (currPrice-purchasePrice)/purchasePrice<=thresholds['stopLoss']:
-		return np.inf
-	if (currPrice-purchasePrice)/purchasePrice>=thresholds['stopGain']:
-		return np.inf
+def sellSig(holdingStatus,currPrice,thresholds={'stopLoss':-0.1,'stopGain':0.2}):
+	#{u'TimeStamp': u'2017-09-30 19:45:20.873574', u'HoldingStatus': u'False', u'MarketName': u'BTC-1ST', u'PeakPrice': u'0', u'BuyPrice': u'0'}
+	import sys
+	if holdingStatus==None or holdingStatus['HoldingStatus']=='False':
+		return None
+	if holdingStatus['BuyPrice']==None or currPrice==None or thresholds==None:
+		print(holdingStatus)
+		print(currPrice)
+		print(thresholds)
+		raise ValueError('erroneous holdingStatus OR currPrice OR thresholds')
+	holdingStatus['BuyPrice']=float(holdingStatus['BuyPrice'])
+	holdingStatus['PeakPrice']=float(holdingStatus['PeakPrice'])
+	if holdingStatus['BuyPrice']<0 or currPrice<0:
+		print(holdingStatus)
+		print(currPrice)
+		raise ValueError('erroneous holdingStatus OR currPrice')
+	if (currPrice-holdingStatus['BuyPrice'])/holdingStatus['BuyPrice']<=thresholds['stopLoss']:
+		return sys.maxint
+	if (currPrice-holdingStatus['BuyPrice'])/holdingStatus['BuyPrice']>=thresholds['stopGain']:
+		return sys.maxint
 	return 0
 
 
 
-def rollingWindow(data,histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=5):
+def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=20):
 	#-------------------------------
 	#this function is used to deal with singal trading pair, e.g. bit-omg
 	#the time units for rwLength and checkTimeInterval and inputTimeInterval are min 
@@ -142,8 +166,8 @@ def rollingWindow(data,histTimeInterval=1,rwLength=60,checkTimeInterval=5,warnin
 	#-------------------------------
 	import datetime
 	import time
-	import numpy as np
-	import pandas as pd
+	#import numpy as np
+	#import pandas as pd
 	import collections as c
 	#basic sanity check
 	if data==None or len(data)<=5:
@@ -155,8 +179,9 @@ def rollingWindow(data,histTimeInterval=1,rwLength=60,checkTimeInterval=5,warnin
 	#sort data to make sure its time ascending
 	data.sort(key=lambda x:x['T'])
 
-	if maxLatency==None or time.time()-time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())>maxLatency:
-		raise ValueError('last update timestamp is too old: '+str(data[-1]['T']))
+	if maxLatency==None or time.time()-time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())>maxLatency*60:
+		print('warning: '+str(tradingPair)+' last update timestamp is too old: '+str(data[-1]['T']))
+		return {'buySig':None,'sellSig':None}
 	if time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())-time.mktime(datetime.datetime.strptime(data[0]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())<24*60*60:
 		raise ValueError('history not exceeding 24h'+str(data[-1]['T'])+' '+str(data[0]['T']))
 
@@ -173,7 +198,8 @@ def rollingWindow(data,histTimeInterval=1,rwLength=60,checkTimeInterval=5,warnin
 		ts=time.mktime(datetime.datetime.strptime(data[i]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
 		if preTs!=None:
 			if preTs-ts>warningTimeGap*60:
-				print('warning, time interval exceeds warningTimeGap '+str(data[i])+' '+str(data[i+1]))
+				pass
+				#print('warning, '+str(tradingPair)+' time interval exceeds warningTimeGap('+str(warningTimeGap)+') '+str(data[i]['T'])+' '+str(data[i+1]['T']))
 			if preTs-ts<histTimeInterval*60:
 				print(str(data[i-1]))
 				print(str(data[i]))
@@ -195,18 +221,31 @@ def rollingWindow(data,histTimeInterval=1,rwLength=60,checkTimeInterval=5,warnin
 	if not (currRWtimeWriteFlag and preRWtimeWriteFlag):
 		raise ValueError('not writing')
 	#read holding position here
-	#purchasePrice,
-
-	return {'buySig':buySig(currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum,preRWVolumeSum=preRWVolumeSum,twentyFourHourVolume=twentyFourHourVolume,weights={'V':0.8,'P':0.2},thresholds={'V':1}),'sellSig':sellSig(purchasePrice=purchasePrice,currPrice=currPrice,thresholds={'stopLoss':0.1,'stopGain':0.2})}
-
+	holdingStatus = getHoldingStatus(tradingPair)
+	return {'buySig':buySig(tradingPair=tradingPair,currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum,preRWVolumeSum=preRWVolumeSum,twentyFourHourVolume=twentyFourHourVolume,weights={'V':0.8,'P':0.2},thresholds={'V':1,'P':0.05,'twentyFourHourVolume':300}),'sellSig':sellSig(holdingStatus=holdingStatus,currPrice=currPrice,thresholds={'stopLoss':0.1,'stopGain':0.2})}
 
 
 
+def generateCandidates(marketHistoricalData):
+	import heapq as hq
+	if marketHistoricalData==None:
+		raise ValueError('erroneous marketHistoricalData')
+	buyCand,sellCand=[],[]
+	for pair in marketHistoricalData.keys():
+		ans=rollingWindow(tradingPair=pair,data=marketHistoricalData[pair],histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=5)
+		if ans['buySig']!=None:
+			hq.heappush(buyCand,(-ans['buySig'],pair))
+		if 	ans['sellSig']!=None:
+			hq.heappush(sellCand,(-ans['sellSig'],pair))
+	return (buyCand,sellCand)
 
 
 
 
 
+# buyingCandidates,sellingCandidates = generateCandidates(marketHistoricalData)
+# print('buyingCandidates:',buyingCandidates)
+# print('sellingCandidates:',sellingCandidates)
 
 
 
