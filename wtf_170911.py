@@ -103,12 +103,12 @@ def irrExpSmth(data
 
 
 
-def buySig(tradingPair,currPrice,prePrice,currRWVolumeSum,preRWVolumeSum,twentyFourHourVolume,weights={'V':0.8,'P':0.2},thresholds={'V':1,'P':0.05,'twentyFourHourVolume':300}):
-	if currPrice==None or prePrice==None or twentyFourHourVolume==None:
+def buySig(tradingPair,currPrice,prePrice,currRWVolumeSum,preRWVolumeSum,twentyFourHourBTCVolume,weights={'V':0.8,'P':0.2},thresholds={'V':1,'P':0.05,'twentyFourHourBTCVolume':300}):
+	if currPrice==None or prePrice==None or twentyFourHourBTCVolume==None:
 		print(currPrice)
 		print(prePrice)
-		print(twentyFourHourVolume)
-		raise ValueError('erroneous currPrice OR prePrice OR twentyFourHourVolume')
+		print(twentyFourHourBTCVolume)
+		raise ValueError('erroneous currPrice OR prePrice OR twentyFourHourBTCVolume')
 	if currRWVolumeSum==None or preRWVolumeSum==None or currRWVolumeSum<=0 or preRWVolumeSum<=0:
 		raise ValueError()
 	if sum(weights.values())!=1:
@@ -118,8 +118,8 @@ def buySig(tradingPair,currPrice,prePrice,currRWVolumeSum,preRWVolumeSum,twentyF
 	# if currPrice<prePrice:
 	# 	print(tradingPair+' has a lower price (curr:'+str(currPrice)+') vs (pre:'+str(prePrice)+')')
 	# 	return None
-	if twentyFourHourVolume<thresholds['twentyFourHourVolume']:
-		print(tradingPair+' twentyFourHourVolume < '+str(thresholds['twentyFourHourVolume']))
+	if twentyFourHourBTCVolume<thresholds['twentyFourHourBTCVolume']:
+		print(tradingPair+' twentyFourHourBTCVolume < '+str(thresholds['twentyFourHourBTCVolume']))
 		return None
 	vThresholdValue=(currRWVolumeSum-preRWVolumeSum)/preRWVolumeSum
 	pThresholdValue=(currPrice-prePrice)/prePrice
@@ -191,7 +191,7 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 	currRWtimeFrame,preRWtimeFrame={'start':time.time()-rwLength*60,'end':time.time()},{'start':time.time()-checkTimeInterval*60-rwLength*60,'end':time.time()-checkTimeInterval*60}
 	currRWtimeWriteFlag,preRWtimeWriteFlag=False,False
 	stopTime=currRWtimeFrame['end']-24*60*60
-	currRWVolumeSum,preRWVolumeSum,twentyFourHourVolume=0,0,0
+	currRWVolumeSum,preRWVolumeSum,twentyFourHourBTCVolume=0,0,0
 	preTs=None
 
 
@@ -216,14 +216,14 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 			preRWVolumeSum+=data[i]['V']
 			preRWtimeWriteFlag=True
 		if stopTime<=ts<=currRWtimeFrame['end']:
-			twentyFourHourVolume+=data[i]['V']*data[i]['C']
+			twentyFourHourBTCVolume+=data[i]['V']*data[i]['C']
 		preTs=ts
 
 	if not (currRWtimeWriteFlag and preRWtimeWriteFlag):
 		raise ValueError('not writing, currRWVolumeSum: '+str(currRWVolumeSum)+', preRWVolumeSum: '+str(preRWVolumeSum))
 	#read holding position here
 	holdingStatus = getHoldingStatus(tradingPair)
-	return {'buySig':buySig(tradingPair=tradingPair,currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum,preRWVolumeSum=preRWVolumeSum,twentyFourHourVolume=twentyFourHourVolume,weights={'V':0.8,'P':0.2},thresholds={'V':0.5,'P':0.025,'twentyFourHourVolume':300}),'sellSig':sellSig(holdingStatus=holdingStatus,currPrice=currPrice,thresholds={'stopLoss':0.1,'stopGain':0.2}),'twentyFourHourVolume':twentyFourHourVolume}
+	return {'buySig':buySig(tradingPair=tradingPair,currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum,preRWVolumeSum=preRWVolumeSum,twentyFourHourBTCVolume=twentyFourHourBTCVolume,weights={'V':0.8,'P':0.2},thresholds={'V':0.5,'P':0.025,'twentyFourHourBTCVolume':300}),'sellSig':sellSig(holdingStatus=holdingStatus,currPrice=currPrice,thresholds={'stopLoss':0.1,'stopGain':0.25}),'twentyFourHourBTCVolume':twentyFourHourBTCVolume}
 
 
 
@@ -236,9 +236,9 @@ def generateCandidates(marketHistoricalData):
 	for pair in marketHistoricalData.keys():
 		ans=rollingWindow(tradingPair=pair,data=marketHistoricalData[pair],histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=10)
 		if ans!=None and ans['buySig']!=None:
-			hq.heappush(buyCand,(-ans['buySig'],pair,ans['twentyFourHourVolume'],time.time()))
+			hq.heappush(buyCand,(-ans['buySig'],pair,ans['twentyFourHourBTCVolume'],time.time()))
 		if ans!=None and ans['sellSig']!=None:
-			hq.heappush(sellCand,(-ans['sellSig'],pair,ans['twentyFourHourVolume'],time.time()))
+			hq.heappush(sellCand,(-ans['sellSig'],pair,ans['twentyFourHourBTCVolume'],time.time()))
 	return (buyCand,sellCand)
 
 
