@@ -171,23 +171,24 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 	import collections as c
 	#basic sanity check
 	if data==None or len(data)<=5:
-		raise ValueError("erroneous input data: "+str(len(data)))
+		raise ValueError("erroneous input data: "+str(data))
 	if warningTimeGap==None or (not 0<warningTimeGap):
 		raise ValueError('warningTimeGap >0')
 	if histTimeInterval>=warningTimeGap:
 		raise ValueError('histTimeInterval: '+str(histTimeInterval)+'must be less than warningTimeGap: '+str(warningTimeGap))
 	#sort data to make sure its time ascending
 	data.sort(key=lambda x:x['T'])
+	print('latest timeStamp: '+str(tradingPair)+' '+str(data[-1]['T']))
 
 	if maxLatency==None or time.time()-time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())>maxLatency*60:
 		print('warning: '+str(tradingPair)+' last update timestamp is too old: '+str(data[-1]['T']))
-		return {'buySig':None,'sellSig':None}
+		return None
 	if time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())-time.mktime(datetime.datetime.strptime(data[0]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())<24*60*60:
 		raise ValueError('history not exceeding 24h'+str(data[-1]['T'])+' '+str(data[0]['T']))
 
 	#initialization
 	rw,currPrice,prePrice=c.deque(),data[-1]['C'],None
-	currRWtimeFrame,preRWtimeFrame={'start':time.time()-rwLength*60,'end':time.time()},{'start':time.time()-checkTimeInterval*60-rwLength*60,'end':time.time()-checkTimeInterval*60},
+	currRWtimeFrame,preRWtimeFrame={'start':time.time()-rwLength*60,'end':time.time()},{'start':time.time()-checkTimeInterval*60-rwLength*60,'end':time.time()-checkTimeInterval*60}
 	currRWtimeWriteFlag,preRWtimeWriteFlag=False,False
 	stopTime=currRWtimeFrame['end']-24*60*60
 	currRWVolumeSum,preRWVolumeSum,twentyFourHourVolume=0,0,0
@@ -215,28 +216,29 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 			preRWVolumeSum+=data[i]['V']
 			preRWtimeWriteFlag=True
 		if stopTime<=ts<=currRWtimeFrame['end']:
-			twentyFourHourVolume+=data[i]['V']
+			twentyFourHourVolume+=data[i]['V']*data[i]['C']
 		preTs=ts
 
 	if not (currRWtimeWriteFlag and preRWtimeWriteFlag):
-		raise ValueError('not writing')
+		raise ValueError('not writing, currRWVolumeSum: '+str(currRWVolumeSum)+', preRWVolumeSum: '+str(preRWVolumeSum))
 	#read holding position here
 	holdingStatus = getHoldingStatus(tradingPair)
-	return {'buySig':buySig(tradingPair=tradingPair,currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum,preRWVolumeSum=preRWVolumeSum,twentyFourHourVolume=twentyFourHourVolume,weights={'V':0.8,'P':0.2},thresholds={'V':1,'P':0.05,'twentyFourHourVolume':300}),'sellSig':sellSig(holdingStatus=holdingStatus,currPrice=currPrice,thresholds={'stopLoss':0.1,'stopGain':0.2})}
+	return {'buySig':buySig(tradingPair=tradingPair,currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum,preRWVolumeSum=preRWVolumeSum,twentyFourHourVolume=twentyFourHourVolume,weights={'V':0.8,'P':0.2},thresholds={'V':0.5,'P':0.025,'twentyFourHourVolume':300}),'sellSig':sellSig(holdingStatus=holdingStatus,currPrice=currPrice,thresholds={'stopLoss':0.1,'stopGain':0.2}),'twentyFourHourVolume':twentyFourHourVolume}
 
 
 
 def generateCandidates(marketHistoricalData):
 	import heapq as hq
+	import time
 	if marketHistoricalData==None:
 		raise ValueError('erroneous marketHistoricalData')
 	buyCand,sellCand=[],[]
 	for pair in marketHistoricalData.keys():
-		ans=rollingWindow(tradingPair=pair,data=marketHistoricalData[pair],histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=5)
-		if ans['buySig']!=None:
-			hq.heappush(buyCand,(-ans['buySig'],pair))
-		if 	ans['sellSig']!=None:
-			hq.heappush(sellCand,(-ans['sellSig'],pair))
+		ans=rollingWindow(tradingPair=pair,data=marketHistoricalData[pair],histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=10)
+		if ans!=None and ans['buySig']!=None:
+			hq.heappush(buyCand,(-ans['buySig'],pair,ans['twentyFourHourVolume'],time.time()))
+		if ans!=None and ans['sellSig']!=None:
+			hq.heappush(sellCand,(-ans['sellSig'],pair,ans['twentyFourHourVolume'],time.time()))
 	return (buyCand,sellCand)
 
 

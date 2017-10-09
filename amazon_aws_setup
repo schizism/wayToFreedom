@@ -1,0 +1,18 @@
+
+change region to oregon
+method to test run code:
+	go WTFtestcomponent
+	lambda_handler=main in java
+	parameter in fron with capital
+	fill sellingcandidates, buyingcandidates as the output of buy/sell function
+	click test -> log output
+
+method to check database:
+	go dynamoDB -> tables -> items 
+
+create test environment
+	lambda -> functions -> select blueprint -> role (choose existing one -> service role/wtftestcomponent) -> time 5min
+
+
+
+
