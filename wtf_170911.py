@@ -220,6 +220,8 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 		preTs=ts
 
 	if not (currRWtimeWriteFlag and preRWtimeWriteFlag):
+		print(currRWtimeFrame,preRWtimeFrame,stopTime)
+		print(data)
 		raise ValueError('not writing, currRWVolumeSum: '+str(currRWVolumeSum)+', preRWVolumeSum: '+str(preRWVolumeSum))
 	#read holding position here
 	holdingStatus=getHoldingStatus(tradingPair)
