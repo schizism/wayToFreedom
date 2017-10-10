@@ -222,8 +222,8 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 	if not (currRWtimeWriteFlag and preRWtimeWriteFlag):
 		raise ValueError('not writing, currRWVolumeSum: '+str(currRWVolumeSum)+', preRWVolumeSum: '+str(preRWVolumeSum))
 	#read holding position here
-	holdingStatus = getHoldingStatus(tradingPair)
-	return {'buySig':buySig(tradingPair=tradingPair,currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum,preRWVolumeSum=preRWVolumeSum,twentyFourHourBTCVolume=twentyFourHourBTCVolume,weights={'V':0.8,'P':0.2},thresholds={'V':0.5,'P':0.025,'twentyFourHourBTCVolume':300}),'sellSig':sellSig(holdingStatus=holdingStatus,currPrice=currPrice,thresholds={'stopLoss':0.1,'stopGain':0.25}),'twentyFourHourBTCVolume':twentyFourHourBTCVolume}
+	holdingStatus=getHoldingStatus(tradingPair)
+	return {'buySig':buySig(tradingPair=tradingPair,currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum,preRWVolumeSum=preRWVolumeSum,twentyFourHourBTCVolume=twentyFourHourBTCVolume,weights={'V':0.8,'P':0.2},thresholds={'V':0.5,'P':0.025,'twentyFourHourBTCVolume':300}),'sellSig':sellSig(holdingStatus=holdingStatus,currPrice=currPrice,thresholds={'stopLoss':0.1,'stopGain':0.25}),'twentyFourHourBTCVolume':twentyFourHourBTCVolume,'peakPrice':holdingStatus['PeakPrice']}
 
 
 
@@ -236,9 +236,9 @@ def generateCandidates(marketHistoricalData):
 	for pair in marketHistoricalData.keys():
 		ans=rollingWindow(tradingPair=pair,data=marketHistoricalData[pair],histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=10)
 		if ans!=None and ans['buySig']!=None:
-			hq.heappush(buyCand,(-ans['buySig'],pair,ans['twentyFourHourBTCVolume'],time.time()))
+			hq.heappush(buyCand,(-ans['buySig'],pair,ans['twentyFourHourBTCVolume'],ans['peakPrice'],time.time()))
 		if ans!=None and ans['sellSig']!=None:
-			hq.heappush(sellCand,(-ans['sellSig'],pair,ans['twentyFourHourBTCVolume'],time.time()))
+			hq.heappush(sellCand,(-ans['sellSig'],pair,ans['twentyFourHourBTCVolume'],ans['peakPrice'],time.time()))
 	return (buyCand,sellCand)
 
 
