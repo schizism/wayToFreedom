@@ -179,6 +179,8 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 		raise ValueError('erroneous lastPCheckTimeSpan: '+str(lastPCheckTimeSpan))
 	if lastPVCheckThreshold==None:
 		raise ValueError('erroneous lastPVCheckThreshold')
+	if lastPCheckTimeSpan<=maxLatency or lastVCheckTimeSpan<=maxLatency:
+		print('warning: lastPCheckTimeSpan('+str(lastPCheckTimeSpan)+') or lastVCheckTimeSpan('+str(lastVCheckTimeSpan)+') is less than maxLatency('+str(maxLatency)') which means trading pairs which last entry satisfying (currentTime-maxLatency <= timeStamp < currentTime-last[P,V]CheckTimeSpan) will automatically fail last min checks')
 	#sort data to make sure its time ascending
 	data.sort(key=lambda x:x['T'])
 	print('latest timeStamp: '+str(tradingPair)+' '+str(data[-1]['T']))
@@ -223,16 +225,16 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 			prePrice=data[i]['C']
 		if lastMinCheck:
 			if lastP==None and ts<=currRWtimeFrame['end']-lastPCheckTimeSpan*60:
-				lastP=data[i]['C']
+				lastP=data[i]
 			if ts>=lastVtimeFrame['start']:
 				lastV+=data[i]['V']*data[i]['C']
 			else:
 				if lastP==None:
 					pass
-				elif currPrice-lastP>lastPVCheckThreshold['p'] and lastV>lastPVCheckThreshold['v']:
+				elif currPrice-lastP['C']>lastPVCheckThreshold['p'] and lastV>lastPVCheckThreshold['v']:
 					lastMinCheck=False
 				else:
-					print('warning: tradingPair '+str(tradingPair)+' not passing last min checks (lastPrice:'+str(lastP)+' currPrice:'+str(currPrice)+' vs lastPriceThreshold:'+str(lastPVCheckThreshold['p'])+', lastVolume:'+str(lastV)+' vs lastVolumeThreshold:'+str(lastPVCheckThreshold['v'])+')')
+					print('warning: tradingPair '+str(tradingPair)+' not passing last min checks (lastPrice:'+str(lastP)+' currPrice:'+str(data[-1])+' vs lastPriceThreshold:'+str(lastPVCheckThreshold['p'])+', lastVolume:'+str(lastV)+' vs lastVolumeThreshold:'+str(lastPVCheckThreshold['v'])+')')
 					print('lastVCheckTimeSpan:'+str(lastVCheckTimeSpan)+'min, lastPCheckTimeSpan:'+str(lastPCheckTimeSpan)+'min')
 					return None
 		if currRWtimeFrame['start']<=ts<=currRWtimeFrame['end']:
