@@ -153,7 +153,7 @@ def sellSig(holdingStatus,currPrice,thresholds={'stopLoss':-0.07,'stopPeakLoss':
 
 
 
-def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=20,lastVCheckTimeSpan=5,lastPCheckTimeSpan=5,lastPVCheckThreshold={'p':0,'v':30}):
+def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=60,maxLatency=20,lastVCheckTimeSpan=5,lastPCheckTimeSpan=5,lastPVCheckThreshold={'p':0,'v':30}):
 	#-------------------------------
 	#this function is used to deal with singal trading pair, e.g. bit-omg
 	#the time units for rwLength and checkTimeInterval and inputTimeInterval are min 
@@ -207,8 +207,8 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 		ts=time.mktime(datetime.datetime.strptime(data[i]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
 		if preTs!=None:
 			if preTs-ts>warningTimeGap*60:
-				pass
-				#print('warning, '+str(tradingPair)+' time interval exceeds warningTimeGap('+str(warningTimeGap)+') '+str(data[i]['T'])+' '+str(data[i+1]['T']))
+				print('warning, '+str(tradingPair)+' time interval exceeds warningTimeGap('+str(warningTimeGap)+') '+str(data[i]['T'])+' '+str(data[i+1]['T']))
+				return None
 			if preTs-ts<histTimeInterval*60:
 				print(str(data[i-1]))
 				print(str(data[i]))
