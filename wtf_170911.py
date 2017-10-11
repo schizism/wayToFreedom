@@ -132,23 +132,20 @@ def buySig(tradingPair,currPrice,prePrice,currRWVolumeSum,preRWVolumeSum,twentyF
 	return vThresholdValue/thresholds['V']*weights['V']+pThresholdValue/thresholds['P']*weights['P']
 
 
-def sellSig(holdingStatus,currPrice,thresholds={'stopLoss':-0.1,'stopGain':0.2}):
+def sellSig(holdingStatus,currPrice,thresholds={'stopLoss':-0.07,'stopPeakLoss':-0.1,'stopGain':0.2}):
 	#{u'TimeStamp': u'2017-09-30 19:45:20.873574', u'HoldingStatus': u'False', u'MarketName': u'BTC-1ST', u'PeakPrice': u'0', u'BuyPrice': u'0'}
 	import sys
 	if holdingStatus==None or holdingStatus['HoldingStatus']=='False':
 		return None
 	if holdingStatus['BuyPrice']==None or currPrice==None or thresholds==None:
-		print(holdingStatus)
-		print(currPrice)
-		print(thresholds)
-		raise ValueError('erroneous holdingStatus OR currPrice OR thresholds')
+		raise ValueError('erroneous holdingStatus('+str(holdingStatus['BuyPrice'])+') OR currPrice('+str(currPrice)+') OR thresholds('+str(thresholds)+')')
 	holdingStatus['BuyPrice']=float(holdingStatus['BuyPrice'])
 	holdingStatus['PeakPrice']=float(holdingStatus['PeakPrice'])
 	if holdingStatus['BuyPrice']<0 or currPrice<0:
-		print(holdingStatus)
-		print(currPrice)
-		raise ValueError('erroneous holdingStatus OR currPrice')
+		raise ValueError('erroneous holdingStatus('+str(holdingStatus)+') OR currPrice('+str(currPrice)+')')
 	if (currPrice-holdingStatus['BuyPrice'])/holdingStatus['BuyPrice']<=thresholds['stopLoss']:
+		return sys.maxint
+	if (currPrice-holdingStatus['PeakPrice'])/holdingStatus['PeakPrice']<=thresholds['stopPeakLoss']:
 		return sys.maxint
 	if (currPrice-holdingStatus['BuyPrice'])/holdingStatus['BuyPrice']>=thresholds['stopGain']:
 		return sys.maxint
@@ -200,7 +197,7 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 	stopTime=currRWtimeFrame['end']-24*60*60
 	currRWVolumeSum,preRWVolumeSum,twentyFourHourBTCVolume=0,0,0
 	preTs=None
-	#last X min check
+		#last X min check
 	lastMinCheck=True
 	lastV,lastP=0,None
 	lastVtimeFrame={'start':currRWtimeFrame['end']-lastVCheckTimeSpan*60,'end':currRWtimeFrame['end']}
@@ -256,7 +253,7 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 		return None
 	#read holding position here
 	holdingStatus=getHoldingStatus(tradingPair)
-	return {'buySig':buySig(tradingPair=tradingPair,currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum,preRWVolumeSum=preRWVolumeSum,twentyFourHourBTCVolume=twentyFourHourBTCVolume,weights={'V':0.8,'P':0.2},thresholds={'V':0.5,'P':0.025,'twentyFourHourBTCVolume':300}),'sellSig':sellSig(holdingStatus=holdingStatus,currPrice=currPrice,thresholds={'stopLoss':0.1,'stopGain':0.25}),'twentyFourHourBTCVolume':twentyFourHourBTCVolume,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None)}
+	return {'buySig':buySig(tradingPair=tradingPair,currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum,preRWVolumeSum=preRWVolumeSum,twentyFourHourBTCVolume=twentyFourHourBTCVolume,weights={'V':0.8,'P':0.2},thresholds={'V':0.5,'P':0.025,'twentyFourHourBTCVolume':300}),'sellSig':sellSig(holdingStatus=holdingStatus,currPrice=currPrice,thresholds={'stopLoss':-0.07,'stopPeakLoss':-0.1,'stopGain':0.2}),'twentyFourHourBTCVolume':twentyFourHourBTCVolume,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None)}
 
 
 
