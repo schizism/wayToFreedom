@@ -156,7 +156,7 @@ def sellSig(holdingStatus,currPrice,thresholds={'stopLoss':-0.1,'stopGain':0.2})
 
 
 
-def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=20):
+def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=20,lastVCheckTimeSpan=5,lastPCheckTimeSpan=5,lastPVCheckThreshold={'p':0,'v':30}):
 	#-------------------------------
 	#this function is used to deal with singal trading pair, e.g. bit-omg
 	#the time units for rwLength and checkTimeInterval and inputTimeInterval are min 
@@ -176,6 +176,12 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 		raise ValueError('warningTimeGap >0')
 	if histTimeInterval>=warningTimeGap:
 		raise ValueError('histTimeInterval: '+str(histTimeInterval)+'must be less than warningTimeGap: '+str(warningTimeGap))
+	if lastVCheckTimeSpan==None or lastVCheckTimeSpan<0 or lastVCheckTimeSpan>1440:
+		raise ValueError('erroneous lastVCheckTimeSpan: '+str(lastVCheckTimeSpan))
+	if lastPCheckTimeSpan==None or lastPCheckTimeSpan<0 or lastPCheckTimeSpan>1440:
+		raise ValueError('erroneous lastPCheckTimeSpan: '+str(lastPCheckTimeSpan))
+	if lastPVCheckThreshold==None:
+		raise ValueError('erroneous lastPVCheckThreshold')
 	#sort data to make sure its time ascending
 	data.sort(key=lambda x:x['T'])
 	print('latest timeStamp: '+str(tradingPair)+' '+str(data[-1]['T']))
@@ -184,7 +190,8 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 		print('warning: '+str(tradingPair)+' last update timestamp is too old: '+str(data[-1]['T']))
 		return None
 	if time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())-time.mktime(datetime.datetime.strptime(data[0]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())<24*60*60:
-		raise ValueError('history not exceeding 24h'+str(data[-1]['T'])+' '+str(data[0]['T']))
+		print('history not exceeding 24h'+str(data[-1]['T'])+' '+str(data[0]['T']))
+		return None
 
 	#initialization
 	rw,currPrice,prePrice=c.deque(),data[-1]['C'],None
@@ -193,6 +200,10 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 	stopTime=currRWtimeFrame['end']-24*60*60
 	currRWVolumeSum,preRWVolumeSum,twentyFourHourBTCVolume=0,0,0
 	preTs=None
+	#last X min check
+	lastMinCheck=True
+	lastV,lastP=0,None
+	lastVtimeFrame={'start':currRWtimeFrame['end']-lastVCheckTimeSpan*60,'end':currRWtimeFrame['end']}
 
 
 	for i in range(len(data)-1,-1,-1):
@@ -204,11 +215,29 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 			if preTs-ts<histTimeInterval*60:
 				print(str(data[i-1]))
 				print(str(data[i]))
-				raise ValueError('data timestamp overlapping')
+				print('data timestamp overlapping, will skip this trading pair')
+				return None
 		if ts<stopTime:
 			break
+		if ts>currRWtimeFrame['end']:
+			print('warning: data last time stamp('+str(data[i]['T'])+') is larger than current time stamp('+str(currRWtimeFrame['end'])+')')
+			return None
 		if prePrice==None and ts<=currRWtimeFrame['end']-60*60:
 			prePrice=data[i]['C']
+		if lastMinCheck:
+			if lastP==None and ts<=currRWtimeFrame['end']-lastPCheckTimeSpan*60:
+				lastP=data[i]['C']
+			if ts>=lastVtimeFrame['start']:
+				lastV+=data[i]['V']*data[i]['C']
+			else:
+				if lastP==None:
+					pass
+				elif currPrice-lastP>lastPVCheckThreshold['p'] and lastV>lastPVCheckThreshold['v']:
+					lastMinCheck=False
+				else:
+					print('warning: tradingPair '+str(tradingPair)+' not passing last min checks (lastPrice:'+str(lastP)+' currPrice:'+str(currPrice)+' vs lastPriceThreshold:'+str(lastPVCheckThreshold['p'])+', lastVolume:'+str(lastV)+' vs lastVolumeThreshold:'+str(lastPVCheckThreshold['v'])+')')
+					print('lastVCheckTimeSpan:'+str(lastVCheckTimeSpan)+'min, lastPCheckTimeSpan:'+str(lastPCheckTimeSpan)+'min')
+					return None
 		if currRWtimeFrame['start']<=ts<=currRWtimeFrame['end']:
 			currRWVolumeSum+=data[i]['V']
 			currRWtimeWriteFlag=True
@@ -221,8 +250,8 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 
 	if not (currRWtimeWriteFlag and preRWtimeWriteFlag):
 		print(currRWtimeFrame,preRWtimeFrame,stopTime)
-		print(data[0])
-		print(data[-1])
+		print(data[:5])
+		print(data[-5:])
 		print('not writing, currRWVolumeSum: '+str(currRWVolumeSum)+', preRWVolumeSum: '+str(preRWVolumeSum))
 		return None
 	#read holding position here
@@ -238,7 +267,7 @@ def generateCandidates(marketHistoricalData):
 		raise ValueError('erroneous marketHistoricalData')
 	buyCand,sellCand=[],[]
 	for pair in marketHistoricalData.keys():
-		ans=rollingWindow(tradingPair=pair,data=marketHistoricalData[pair],histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=10)
+		ans=rollingWindow(tradingPair=pair,data=marketHistoricalData[pair],histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=10,lastVCheckTimeSpan=5,lastPCheckTimeSpan=5,lastPVCheckThreshold={'p':0,'v':30})
 		if ans!=None and ans['buySig']!=None:
 			hq.heappush(buyCand,(-ans['buySig'],pair,ans['twentyFourHourBTCVolume'],ans['peakPrice'],time.time()))
 		if ans!=None and ans['sellSig']!=None:
