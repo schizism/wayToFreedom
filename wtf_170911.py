@@ -180,7 +180,7 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 	if lastPVCheckThreshold==None:
 		raise ValueError('erroneous lastPVCheckThreshold')
 	if lastPCheckTimeSpan<=maxLatency or lastVCheckTimeSpan<=maxLatency:
-		print('warning: lastPCheckTimeSpan('+str(lastPCheckTimeSpan)+') or lastVCheckTimeSpan('+str(lastVCheckTimeSpan)+') is less than maxLatency('+str(maxLatency)') which means trading pairs which last entry satisfying (currentTime-maxLatency <= timeStamp < currentTime-last[P,V]CheckTimeSpan) will automatically fail last min checks')
+		print('warning: lastPCheckTimeSpan('+str(lastPCheckTimeSpan)+') or lastVCheckTimeSpan('+str(lastVCheckTimeSpan)+') is less than maxLatency('+str(maxLatency)+') which means trading pairs which last entry satisfying (currentTime-maxLatency <= timeStamp < currentTime-last[P,V]CheckTimeSpan) will automatically fail last min checks')
 	#sort data to make sure its time ascending
 	data.sort(key=lambda x:x['T'])
 	print('latest timeStamp: '+str(tradingPair)+' '+str(data[-1]['T']))
