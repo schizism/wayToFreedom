@@ -153,7 +153,7 @@ def sellSig(holdingStatus,currPrice,thresholds={'stopLoss':-0.07,'stopPeakLoss':
 
 
 
-def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=60,maxLatency=20,lastVCheckTimeSpan=5,lastPCheckTimeSpan=5,lastPVCheckThreshold={'p':0,'v':30}):
+def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=60,maxLatency=5,lastVCheckTimeSpan=5,lastPCheckTimeSpan=5,lastPVCheckThreshold={'p':0,'v':30}):
 	#-------------------------------
 	#this function is used to deal with singal trading pair, e.g. bit-omg
 	#the time units for rwLength and checkTimeInterval and inputTimeInterval are min 
@@ -165,7 +165,7 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 	import time
 	#import numpy as np
 	#import pandas as pd
-	import collections as c
+	#import collections as c
 	#basic sanity check
 	if tradingPair==None:
 		raise ValueError("erroneous tradingPair: "+str(tradingPair))
@@ -176,7 +176,7 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 	data.sort(key=lambda x:x['T'])
 	print('latest timeStamp: '+str(tradingPair)+' '+str(data[-1]['T']))
 	#check sell signal before everything else
-	currPrice=data[-1]['C']
+	currPrice,currTS=data[-1]['C'],time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
 	#read holding position here
 	holdingStatus=getHoldingStatus(tradingPair)
 	sellSignal=sellSig(holdingStatus=holdingStatus,currPrice=currPrice,thresholds={'stopLoss':-0.07,'stopPeakLoss':-0.1,'stopGain':1000})
@@ -191,20 +191,22 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 		raise ValueError('erroneous lastPCheckTimeSpan: '+str(lastPCheckTimeSpan))
 	if lastPVCheckThreshold==None:
 		raise ValueError('erroneous lastPVCheckThreshold')
+	if maxLatency==None or maxLatency>6:
+		raise ValueError('None maxLatency or maxLatency('+str(maxLatency)+') cannot exceed 6min due to dynamic last timeStamp')
+	if time.time()-currTS>maxLatency*60:
+		print('warning: '+str(tradingPair)+' last update timestamp too old: '+str(data[-1]['T']))
+		return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None)}
 	if lastPCheckTimeSpan<maxLatency or lastVCheckTimeSpan<maxLatency:
 		print('warning: lastPCheckTimeSpan('+str(lastPCheckTimeSpan)+') or lastVCheckTimeSpan('+str(lastVCheckTimeSpan)+') is less than maxLatency('+str(maxLatency)+') which means trading pairs which last entry satisfying (currentTime-maxLatency <= timeStamp < currentTime-last[P,V]CheckTimeSpan) will automatically fail last min checks')
-	if maxLatency==None or time.time()-time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())>maxLatency*60:
-		print('warning: '+str(tradingPair)+' last update timestamp is too old: '+str(data[-1]['T']))
-		return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None)}
-	if time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())-time.mktime(datetime.datetime.strptime(data[0]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())<24*60*60:
+	if time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())-time.mktime(datetime.datetime.strptime(data[0]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())<86400:
 		print('history not exceeding 24h'+str(data[-1]['T'])+' '+str(data[0]['T']))
 		return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None)}
 
 	#initialization
-	rw,prePrice=c.deque(),None
-	currRWtimeFrame,preRWtimeFrame={'start':time.time()-rwLength*60,'end':time.time()},{'start':time.time()-checkTimeInterval*60-rwLength*60,'end':time.time()-checkTimeInterval*60}
+	prePrice=None
+	currRWtimeFrame,preRWtimeFrame={'start':currTS-rwLength*60,'end':currTS},{'start':currTS-checkTimeInterval*60-rwLength*60,'end':currTS-checkTimeInterval*60}
 	currRWtimeWriteFlag,preRWtimeWriteFlag=False,False
-	stopTime=currRWtimeFrame['end']-24*60*60
+	stopTime=currRWtimeFrame['end']-86400
 	currRWVolumeSum,preRWVolumeSum,twentyFourHourBTCVolume=0,0,0
 	preTs=None
 		#last X min check
@@ -229,7 +231,7 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 		if ts>currRWtimeFrame['end']:
 			print('warning: data last time stamp('+str(data[i]['T'])+') is larger than current time stamp('+str(currRWtimeFrame['end'])+')')
 			return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None)}
-		if prePrice==None and ts<=currRWtimeFrame['end']-60*60:
+		if prePrice==None and ts<=currRWtimeFrame['end']-rwLength*60:
 			prePrice=data[i]['C']
 		if lastMinCheck:
 			if lastP==None and ts<=currRWtimeFrame['end']-lastPCheckTimeSpan*60:
@@ -272,7 +274,7 @@ def generateCandidates(marketHistoricalData):
 		raise ValueError('erroneous marketHistoricalData')
 	buyCand,sellCand=[],[]
 	for pair in marketHistoricalData.keys():
-		ans=rollingWindow(tradingPair=pair,data=marketHistoricalData[pair],histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=10,lastVCheckTimeSpan=5,lastPCheckTimeSpan=5,lastPVCheckThreshold={'p':0,'v':30})
+		ans=rollingWindow(tradingPair=pair,data=marketHistoricalData[pair],histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=10,maxLatency=5,lastVCheckTimeSpan=5,lastPCheckTimeSpan=5,lastPVCheckThreshold={'p':0,'v':10})
 		if ans!=None and ans['buySig']!=None:
 			hq.heappush(buyCand,(-ans['buySig'],{'pair':pair,'twentyFourHourBTCVolume':ans['twentyFourHourBTCVolume'],'peakPrice':ans['peakPrice'],'buyPrice':ans['buyPrice'],'currentTS':time.time()}))
 		if ans!=None and ans['sellSig']!=None:
