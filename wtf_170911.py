@@ -132,22 +132,40 @@ def buySig(tradingPair,currPrice,prePrice,currRWVolumeSum,preRWVolumeSum,twentyF
 	return vThresholdValue/thresholds['V']*weights['V']+pThresholdValue/thresholds['P']*weights['P']
 
 
-def sellSig(holdingStatus,currPrice,thresholds={'stopLoss':-0.07,'stopPeakLoss':-0.1,'stopGain':0.2}):
+def sellSig(holdingStatus,currPrice,currTS,thresholds={'stopLoss':-0.07,'stopPeakLoss':-0.1,'stopGain':0.2,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7]):
 	#{u'TimeStamp': u'2017-09-30 19:45:20.873574', u'HoldingStatus': u'False', u'MarketName': u'BTC-1ST', u'PeakPrice': u'0', u'BuyPrice': u'0'}
 	import sys
 	if holdingStatus==None or holdingStatus['HoldingStatus']=='False':
 		return None
 	if holdingStatus['BuyPrice']==None or currPrice==None or thresholds==None:
 		raise ValueError('erroneous holdingStatus('+str(holdingStatus['BuyPrice'])+') OR currPrice('+str(currPrice)+') OR thresholds('+str(thresholds)+')')
+	if len(peakPriceTrailingIntervals)<=0 or len(peakPriceTrailingIntervals)!=len(set(peakPriceTrailingIntervals)):
+		raise ValueError('erroneous peakPriceTrailingIntervals: '+str(peakPriceTrailingIntervals))
+	if len(peakPriceTrailingThreshold)<=0 or len(peakPriceTrailingThreshold)!=len(peakPriceTrailingIntervals)+1:
+		raise ValueError('erroneous peakPriceTrailingThreshold: '+str(peakPriceTrailingThreshold)+' OR peakPriceTrailingIntervals: '+str(peakPriceTrailingIntervals))
+	if holdingStatus['BuyPrice']<=0 or currPrice<0:
+		raise ValueError('erroneous holdingStatus('+str(holdingStatus)+') OR currPrice('+str(currPrice)+')')
+	#
+	peakPriceTrailingIntervals.sort()
+	peakPriceTrailingIntervals=([-sys.maxint] if peakPriceTrailingIntervals[0]>-sys.maxint else [])+peakPriceTrailingIntervals+([sys.maxint] if peakPriceTrailingIntervals[-1]<sys.maxint else [])
 	holdingStatus['BuyPrice']=float(holdingStatus['BuyPrice'])
 	holdingStatus['PeakPrice']=float(holdingStatus['PeakPrice'])
-	if holdingStatus['BuyPrice']<0 or currPrice<0:
-		raise ValueError('erroneous holdingStatus('+str(holdingStatus)+') OR currPrice('+str(currPrice)+')')
+	
 	if (currPrice-holdingStatus['BuyPrice'])/holdingStatus['BuyPrice']<=thresholds['stopLoss']:
 		return sys.maxint
-	if (currPrice-holdingStatus['PeakPrice'])/holdingStatus['PeakPrice']<=thresholds['stopPeakLoss']:
-		return sys.maxint
+	# if (currPrice-holdingStatus['PeakPrice'])/holdingStatus['PeakPrice']<=thresholds['stopPeakLoss']:
+	# 	return sys.maxint
 	# if (currPrice-holdingStatus['BuyPrice'])/holdingStatus['BuyPrice']>=thresholds['stopGain']:
+	# 	return sys.maxint
+	if holdingStatus['PeakPrice']>holdingStatus['BuyPrice']:
+		risePct=(holdingStatus['PeakPrice']-holdingStatus['BuyPrice'])/holdingStatus['BuyPrice']
+		for i in range(1,len(peakPriceTrailingIntervals)):
+			if peakPriceTrailingIntervals[i-1]<risePct<=peakPriceTrailingIntervals[i] and currPrice<(1-peakPriceTrailingThreshold[i-1])*holdingStatus['BuyPrice']+peakPriceTrailingThreshold[i-1]*holdingStatus['PeakPrice']:
+				print('info: peak price trailing conditions: ',holdingStatus['PeakPrice'],holdingStatus['BuyPrice'],currPrice,peakPriceTrailingIntervals[i-1],peakPriceTrailingIntervals[i],peakPriceTrailingThreshold[i-1])
+				return sys.maxint
+	#if (currTS - holdingStatus['buyTimeStamp']>thresholds['lowMovementCheckTimeGap']*60) and (floor((currTS - holdingStatus['buyTimeStamp'])/86400) * price change threshold %  > (last price / buy price - 1) )
+	# if holdingStatus['BuyPrice']*holdingStatus['Q']<thresholds['LowPurchaseQuantity']:
+	# 	print('info: LowPurchaseQuantity',holdingStatus,thresholds['LowPurchaseQuantity'])
 	# 	return sys.maxint
 	return None
 
@@ -179,7 +197,8 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 	currPrice,currTS=data[-1]['C'],time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
 	#read holding position here
 	holdingStatus=getHoldingStatus(tradingPair)
-	sellSignal=sellSig(holdingStatus=holdingStatus,currPrice=currPrice,thresholds={'stopLoss':-0.07,'stopPeakLoss':-0.1,'stopGain':1000})
+	sellSignal=sellSig(holdingStatus=holdingStatus,currPrice=currPrice,currTS=currTS,thresholds={'stopLoss':-0.07,'stopPeakLoss':-0.1,'stopGain':1000,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7])
+	
 
 	if warningTimeGap==None or (not 0<warningTimeGap):
 		raise ValueError('warningTimeGap >0')
