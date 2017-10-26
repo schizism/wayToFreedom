@@ -160,10 +160,10 @@ def sellSig(holdingStatus,currPrice,currTS,thresholds={'stopLoss':-0.07,'stopPea
 	if holdingStatus['PeakPrice']>holdingStatus['BuyPrice']:
 		risePct=(holdingStatus['PeakPrice']-holdingStatus['BuyPrice'])/holdingStatus['BuyPrice']
 		for i in range(1,len(peakPriceTrailingIntervals)):
-			if peakPriceTrailingIntervals[i-1]<risePct<=peakPriceTrailingIntervals[i] and currPrice<(1-peakPriceTrailingThreshold[i-1])*holdingStatus['BuyPrice']+peakPriceTrailingThreshold[i-1]*holdingStatus['PeakPrice']:
+			if peakPriceTrailingIntervals[i-1]<risePct<=peakPriceTrailingIntervals[i] and currPrice<=(1-peakPriceTrailingThreshold[i-1])*holdingStatus['BuyPrice']+peakPriceTrailingThreshold[i-1]*holdingStatus['PeakPrice']:
 				print('info: peak price trailing conditions: ',holdingStatus['PeakPrice'],holdingStatus['BuyPrice'],currPrice,peakPriceTrailingIntervals[i-1],peakPriceTrailingIntervals[i],peakPriceTrailingThreshold[i-1])
 				return sys.maxint
-	#if (currTS - holdingStatus['buyTimeStamp']>thresholds['lowMovementCheckTimeGap']*60) and (floor((currTS - holdingStatus['buyTimeStamp'])/86400) * price change threshold %  > (last price / buy price - 1) )
+	# if (currTS - holdingStatus['buyTimeStamp']>thresholds['lowMovementCheckTimeGap']*60) and (floor((currTS - holdingStatus['buyTimeStamp'])/86400) * price change threshold %  > (last price / buy price - 1) )
 	# if holdingStatus['BuyPrice']*holdingStatus['Q']<thresholds['LowPurchaseQuantity']:
 	# 	print('info: LowPurchaseQuantity',holdingStatus,thresholds['LowPurchaseQuantity'])
 	# 	return sys.maxint
@@ -173,6 +173,7 @@ def sellSig(holdingStatus,currPrice,currTS,thresholds={'stopLoss':-0.07,'stopPea
 
 def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInterval=5,warningTimeGap=60,maxLatency=5,lastVCheckTimeSpan=5,lastPCheckTimeSpan=5,lastPVCheckThreshold={'p':0,'v':30}):
 	#-------------------------------
+	#this function is for trading strategy 1
 	#this function is used to deal with singal trading pair, e.g. bit-omg
 	#the time units for rwLength and checkTimeInterval and inputTimeInterval are min 
 	#we are assuming input data is a list of json object
@@ -284,6 +285,96 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 		return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
 	return {'buySig':buySig(tradingPair=tradingPair,currPrice=currPrice,prePrice=prePrice,currRWVolumeSum=currRWVolumeSum,preRWVolumeSum=preRWVolumeSum,twentyFourHourBTCVolume=twentyFourHourBTCVolume,weights={'V':0.8,'P':0.2},thresholds={'V':0.5,'P':0.025,'twentyFourHourBTCVolume':300}),'sellSig':sellSignal,'twentyFourHourBTCVolume':twentyFourHourBTCVolume,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
 
+#following are designed to parallel run
+def rollingWindow_2(tradingPair,data,histTimeInterval=1,warningTimeGap=60,maxLatency=5,checkTS=[-45,-30,-15],Pthres=[0.0001,0.0001,0.0001],Vtimespan=15,Vthres=50):
+	#-------------------------------
+	#this function is for trading strategy 2
+	#the time units are still min
+	#Note, code will check current price regardless of checkTS, thus the length of Pthres is equal to checkTS (not less than 1)
+	#-------------------------------
+	import datetime
+	import time
+	#import collections as c
+	if tradingPair==None:
+		raise ValueError("erroneous tradingPair: "+str(tradingPair))
+	if data==None or len(data)<=5:
+		#here need to check with sell logic, for that if data==None, which means we dont have this pair's history, but this doesn't mean it's not trading (due to lag or anything else), if this's the case we may lose the sell signal
+		raise ValueError("erroneous input data: "+str(data))
+	#sort data to make sure its time ascending
+	data.sort(key=lambda x:x['T'])
+	print('latest timeStamp: '+str(tradingPair)+' '+str(data[-1]['T']))
+	#check sell signal before everything else
+	currPrice,currTS=data[-1]['C'],time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
+	#read holding position here
+	holdingStatus=getHoldingStatus(tradingPair)
+	sellSignal=sellSig(holdingStatus=holdingStatus,currPrice=currPrice,currTS=currTS,thresholds={'stopLoss':-0.07,'stopPeakLoss':-0.1,'stopGain':1000,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7])
+
+	if warningTimeGap==None or (not 0<warningTimeGap):
+		raise ValueError('warningTimeGap >0')
+	if histTimeInterval>=warningTimeGap:
+		raise ValueError('histTimeInterval: '+str(histTimeInterval)+'must be less than warningTimeGap: '+str(warningTimeGap))
+	if maxLatency==None or maxLatency>6:
+		raise ValueError('None maxLatency or maxLatency('+str(maxLatency)+') cannot exceed 6min due to dynamic last timeStamp')
+	if time.time()-currTS>maxLatency*60:
+		print('warning: '+str(tradingPair)+' last update timestamp too old: '+str(data[-1]['T']))
+		return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
+	if len(checkTS)<=0 or len(checkTS)!=len(Pthres) or len(checkTS)<=2:
+		raise ValueError('erroneous checkTS('+str(checkTS)+') or Pthres('+str(Pthres)+')')
+	checkTS.sort()
+	if checkTS[-1]>=0:
+		raise ValueError('last checkTS('+str(checkTS)+') must less than 0')
+	if Vtimespan==None or Vtimespan<=0 or Vthres==None:
+		raise ValueError('erroneous Vtimespan('+str(Vtimespan)+') or Vthres('+str(Vthres)+')')
+	Vthres=float(Vthres)
+	if time.mktime(datetime.datetime.strptime(data[0]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())-time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())>checkTS[0]*60:
+		print('history not exceeding desired check timeStamp: '+str(checkTS[0])+' '+str(data[-1]['T'])+' '+str(data[0]['T']))
+		return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
+	#initialization
+	prices=[None]*len(checkTS)+[float(data[-1]['C'])]
+	checkTSunix=[currTS+entry*60 for entry in checkTS]
+	checkTSpointer=len(checkTS)-1
+	stopTime=currTS+min(checkTS[0],-1*Vtimespan)*60
+	BTCVolume,vWindow=data[-1]['V']*data[-1]['C'],{'start':currTS-Vtimespan*60,'end':currTS}
+	preTs=currTS
+	#start loop
+	for i in range(len(data)-2,-1,-1):
+		ts=time.mktime(datetime.datetime.strptime(data[i]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
+		if preTs-ts>warningTimeGap*60:
+			print('warning, '+str(tradingPair)+' time interval exceeds warningTimeGap('+str(warningTimeGap)+') '+str(data[i]['T'])+' '+str(data[i+1]['T']))
+			return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
+		if preTs-ts<histTimeInterval*60:
+			print(str(data[i-1]))
+			print(str(data[i]))
+			print('data timestamp overlapping, will skip this trading pair')
+			return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
+		if checkTSpointer>=0 and ts<=checkTSunix[checkTSpointer]:
+			if checkTSpointer>0 and ts<=checkTSunix[checkTSpointer-1]:
+				print('time gap between data record for trading pair '+str(tradingPair)+' are too big or checkTS intervals are too frequent')
+				print(checkTSpointer,checkTSunix[checkTSpointer],checkTSunix[checkTSpointer-1],ts)
+				return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
+			prices[checkTSpointer]=float(data[i]['C'])
+			if prices[checkTSpointer]<=0:
+				print('erroneous '+str(tradingPair)+' closing price: '+str(data[i]['C']))
+				return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
+			if (prices[checkTSpointer+1]-prices[checkTSpointer])/prices[checkTSpointer]>Pthres[checkTSpointer]:
+				pass
+			else:
+				print('warning: '+str(tradingPair)+' not passing increasing threshold: prices('+str(prices)+') Pthres('+str(Pthres)+')')
+				return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
+			checkTSpointer-=1
+		if vWindow['start']<=ts<=vWindow['end']:
+			BTCVolume+=data[i]['V']*data[i]['C']
+		if ts<stopTime:
+			break
+		preTs=ts
+	if BTCVolume<Vthres:
+		print('warning: tradingPair '+str(tradingPair)+' not passing last Vthres('+str(Vthres)+') BTCVolume('+str(BTCVolume)+')')
+		return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
+	return {'buySig':BTCVolume/Vthres+(prices[-1]-prices[-2])/prices[-2],'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
+	#print(BTCVolume/Vthres+(prices[-1]-prices[-2])/prices[-2])
+	#return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
+
+
 
 
 def generateCandidates(marketHistoricalData):
@@ -299,8 +390,6 @@ def generateCandidates(marketHistoricalData):
 		if ans!=None and ans['sellSig']!=None:
 			hq.heappush(sellCand,(-ans['sellSig'],{'pair':pair,'twentyFourHourBTCVolume':ans['twentyFourHourBTCVolume'],'peakPrice':ans['peakPrice'],'buyPrice':ans['buyPrice'],'currPrice':ans['currPrice'],'currentTS':time.time()}))
 	return (buyCand,sellCand)
-
-
 
 
 
