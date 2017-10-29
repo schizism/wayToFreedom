@@ -152,7 +152,7 @@ def sellSig(holdingStatus,currPrice,currTS,thresholds={'stopLoss':-0.07,'stopPea
 	holdingStatus['PeakPrice']=float(holdingStatus['PeakPrice'])
 	
 	if (currPrice-holdingStatus['BuyPrice'])<=thresholds['stopLoss']*holdingStatus['BuyPrice']:
-		return {'sig':sys.maxint,'comPrice':(1-thresholds['stopLoss'])*holdingStatus['BuyPrice']}
+		return {'sig':sys.maxint,'comPrice':(1-abs(thresholds['stopLoss']))*holdingStatus['BuyPrice']}
 	# if (currPrice-holdingStatus['PeakPrice'])/holdingStatus['PeakPrice']<=thresholds['stopPeakLoss']:
 	# 	return sys.maxint
 	# if (currPrice-holdingStatus['BuyPrice'])/holdingStatus['BuyPrice']>=thresholds['stopGain']:
@@ -165,7 +165,6 @@ def sellSig(holdingStatus,currPrice,currTS,thresholds={'stopLoss':-0.07,'stopPea
 				if currPrice<=comPrice:
 					print('info: peak price trailing conditions: ',holdingStatus['PeakPrice'],holdingStatus['BuyPrice'],currPrice,peakPriceTrailingIntervals[i-1],peakPriceTrailingIntervals[i],peakPriceTrailingThreshold[i-1],comPrice)
 					return {'sig':sys.maxint,'comPrice':comPrice}
-				break
 	# if (currTS - holdingStatus['buyTimeStamp']>thresholds['lowMovementCheckTimeGap']*60) and (floor((currTS - holdingStatus['buyTimeStamp'])/86400) * price change threshold %  > (last price / buy price - 1) )
 	# if holdingStatus['BuyPrice']*holdingStatus['Q']<thresholds['LowPurchaseQuantity']:
 	# 	print('info: LowPurchaseQuantity',holdingStatus,thresholds['LowPurchaseQuantity'])
@@ -201,7 +200,7 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 	currPrice,currTS=data[-1]['C'],time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
 	#read holding position here
 	holdingStatus=getHoldingStatus(tradingPair)
-	sellSignal=sellSig(holdingStatus=holdingStatus,currPrice=currPrice,currTS=currTS,thresholds={'stopLoss':-0.07,'stopPeakLoss':-0.1,'stopGain':1000,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7])
+	sellSignal=sellSig(holdingStatus=holdingStatus,currPrice=currPrice,currTS=currTS,thresholds={'stopLoss':-0.025,'stopPeakLoss':-0.1,'stopGain':1000,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7])
 	
 
 	if warningTimeGap==None or (not 0<warningTimeGap):
@@ -310,7 +309,7 @@ def rollingWindow_2(tradingPair,data,histTimeInterval=1,warningTimeGap=60,maxLat
 	currPrice,currTS=data[-1]['C'],time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
 	#read holding position here
 	holdingStatus=getHoldingStatus(tradingPair)
-	sellSignal=sellSig(holdingStatus=holdingStatus,currPrice=currPrice,currTS=currTS,thresholds={'stopLoss':-0.07,'stopPeakLoss':-0.1,'stopGain':1000,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7])
+	sellSignal=sellSig(holdingStatus=holdingStatus,currPrice=currPrice,currTS=currTS,thresholds={'stopLoss':-0.025,'stopPeakLoss':-0.1,'stopGain':1000,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7])
 	if sellSignal!=None:
 		return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
 
