@@ -379,7 +379,7 @@ def rollingWindow_2(tradingPair,data,histTimeInterval=1,warningTimeGap=60,maxLat
 		if ts<stopTime:
 			break
 		preTs=ts
-	if (lastWindowMax-prices[-1])<lastWinMomentumThres*(lastWindowMax-lastWindowMin):
+	if (lastWindowMax-prices[-1])>=lastWinMomentumThres*(lastWindowMax-lastWindowMin):
 		print('warning: tradingPair '+str(tradingPair)+' not passing last window momentum threshold('+str(lastWinMomentumThres)+')')
 		print(lastWindowMax,lastWindowMin,prices[-1])
 		return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}		
