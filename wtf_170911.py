@@ -39,6 +39,7 @@ def irrExpSmth(data
 
 	import datetime
 	import time
+	import calendar
 	#import numpy as np
 	#import pandas as pd
 
@@ -46,8 +47,8 @@ def irrExpSmth(data
 	data.sort(key=lambda x:x['T'])
 	df=pd.DataFrame(data)
 	#minus all timestamp with the min ts in this dataset to avoid the constant problem
-	intercept=time.mktime(datetime.datetime.strptime(data[0]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
-	df['ts']=df['T'].apply(lambda x:(time.mktime(datetime.datetime.strptime(x,"%Y-%m-%dT%H:%M:%S").timetuple())-intercept)/60.0000)
+	intercept=calendar.timegm(datetime.datetime.strptime(data[0]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
+	df['ts']=df['T'].apply(lambda x:(calendar.timegm(datetime.datetime.strptime(x,"%Y-%m-%dT%H:%M:%S").timetuple())-intercept)/60.0000)
 
 	#initialization
 	S_t,alpha_t,T_t,gamma_t,signal=[None]*len(df),[None]*len(df),[None]*len(df),[None]*len(df),[]
@@ -132,7 +133,7 @@ def buySig(tradingPair,currPrice,prePrice,currRWVolumeSum,preRWVolumeSum,twentyF
 	return vThresholdValue/thresholds['V']*weights['V']+pThresholdValue/thresholds['P']*weights['P']
 
 
-def sellSig(holdingStatus,currPrice,currTS,thresholds={'stopLoss':-0.07,'stopPeakLoss':-0.1,'stopGain':0.2,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7]):
+def sellSig(holdingStatus,currPrice,currTS,thresholds={'stopLoss':-0.07,'stopPeakLoss':-0.1,'stopGain':0.2,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7],gracePeriod=30,gracePeriodStopLoss=-0.1):
 	#{u'TimeStamp': u'2017-09-30 19:45:20.873574', u'HoldingStatus': u'False', u'MarketName': u'BTC-1ST', u'PeakPrice': u'0', u'BuyPrice': u'0'}
 	import sys
 	if holdingStatus==None or holdingStatus['HoldingStatus']=='False':
@@ -145,18 +146,30 @@ def sellSig(holdingStatus,currPrice,currTS,thresholds={'stopLoss':-0.07,'stopPea
 		raise ValueError('erroneous peakPriceTrailingThreshold: '+str(peakPriceTrailingThreshold)+' OR peakPriceTrailingIntervals: '+str(peakPriceTrailingIntervals))
 	if holdingStatus['BuyPrice']<=0 or currPrice<0:
 		raise ValueError('erroneous holdingStatus('+str(holdingStatus)+') OR currPrice('+str(currPrice)+')')
+	if gracePeriod==None or gracePeriod<0:
+		raise ValueError('erroneous gracePeriod'+str(gracePeriod))
+	if gracePeriodStopLoss==None or gracePeriodStopLoss>0:
+		raise ValueError('erroneous gracePeriodStopLoss'+str(gracePeriodStopLoss))
+
 	#
-	peakPriceTrailingIntervals.sort()
-	peakPriceTrailingIntervals=([-sys.maxint] if peakPriceTrailingIntervals[0]>-sys.maxint else [])+peakPriceTrailingIntervals+([sys.maxint] if peakPriceTrailingIntervals[-1]<sys.maxint else [])
 	holdingStatus['BuyPrice']=float(holdingStatus['BuyPrice'])
 	holdingStatus['PeakPrice']=float(holdingStatus['PeakPrice'])
-	
+
+	if currTS-calendar.timegm(datetime.datetime.strptime(holdingStatus['CreatedTimeStamp'],"%Y-%m-%d %H:%M:%S.%f").timetuple())<=gracePeriod*60:
+		if (currPrice-holdingStatus['BuyPrice'])<=gracePeriodStopLoss*holdingStatus['BuyPrice']:
+			return {'sig':sys.maxint,'comPrice':(1-abs(gracePeriodStopLoss))*holdingStatus['BuyPrice']}
+		return None
+
 	if (currPrice-holdingStatus['BuyPrice'])<=thresholds['stopLoss']*holdingStatus['BuyPrice']:
 		return {'sig':sys.maxint,'comPrice':(1-abs(thresholds['stopLoss']))*holdingStatus['BuyPrice']}
 	# if (currPrice-holdingStatus['PeakPrice'])/holdingStatus['PeakPrice']<=thresholds['stopPeakLoss']:
 	# 	return sys.maxint
 	# if (currPrice-holdingStatus['BuyPrice'])/holdingStatus['BuyPrice']>=thresholds['stopGain']:
 	# 	return sys.maxint
+
+	peakPriceTrailingIntervals.sort()
+	peakPriceTrailingIntervals=([-sys.maxint] if peakPriceTrailingIntervals[0]>-sys.maxint else [])+peakPriceTrailingIntervals+([sys.maxint] if peakPriceTrailingIntervals[-1]<sys.maxint else [])
+	
 	if holdingStatus['PeakPrice']>holdingStatus['BuyPrice']:
 		risePct=(holdingStatus['PeakPrice']-holdingStatus['BuyPrice'])/holdingStatus['BuyPrice']
 		for i in range(1,len(peakPriceTrailingIntervals)):
@@ -184,6 +197,7 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 	#-------------------------------
 	import datetime
 	import time
+	import calendar
 	#import numpy as np
 	#import pandas as pd
 	#import collections as c
@@ -197,10 +211,10 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 	data.sort(key=lambda x:x['T'])
 	print('latest timeStamp: '+str(tradingPair)+' '+str(data[-1]['T']))
 	#check sell signal before everything else
-	currPrice,currTS=data[-1]['C'],time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
+	currPrice,currTS=data[-1]['C'],calendar.timegm(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
 	#read holding position here
 	holdingStatus=getHoldingStatus(tradingPair)
-	sellSignal=sellSig(holdingStatus=holdingStatus,currPrice=currPrice,currTS=currTS,thresholds={'stopLoss':-0.025,'stopPeakLoss':-0.1,'stopGain':1000,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7])
+	sellSignal=sellSig(holdingStatus=holdingStatus,currPrice=currPrice,currTS=currTS,thresholds={'stopLoss':-0.025,'stopPeakLoss':-0.1,'stopGain':1000,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7],gracePeriod=30,gracePeriodStopLoss=-0.1)
 	
 
 	if warningTimeGap==None or (not 0<warningTimeGap):
@@ -215,12 +229,12 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 		raise ValueError('erroneous lastPVCheckThreshold')
 	if maxLatency==None or maxLatency>6:
 		raise ValueError('None maxLatency or maxLatency('+str(maxLatency)+') cannot exceed 6min due to dynamic last timeStamp')
-	if time.time()-currTS>maxLatency*60:
+	if calendar.timegm(datetime.datetime.utcnow().utctimetuple())-currTS>maxLatency*60:
 		print('warning: '+str(tradingPair)+' last update timestamp too old: '+str(data[-1]['T']))
 		return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
 	if lastPCheckTimeSpan<maxLatency or lastVCheckTimeSpan<maxLatency:
 		print('warning: lastPCheckTimeSpan('+str(lastPCheckTimeSpan)+') or lastVCheckTimeSpan('+str(lastVCheckTimeSpan)+') is less than maxLatency('+str(maxLatency)+') which means trading pairs which last entry satisfying (currentTime-maxLatency <= timeStamp < currentTime-last[P,V]CheckTimeSpan) will automatically fail last min checks')
-	if time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())-time.mktime(datetime.datetime.strptime(data[0]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())<86400:
+	if calendar.timegm(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())-calendar.timegm(datetime.datetime.strptime(data[0]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())<86400:
 		print('history not exceeding 24h'+str(data[-1]['T'])+' '+str(data[0]['T']))
 		return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
 
@@ -238,7 +252,7 @@ def rollingWindow(tradingPair,data,histTimeInterval=1,rwLength=60,checkTimeInter
 
 
 	for i in range(len(data)-1,-1,-1):
-		ts=time.mktime(datetime.datetime.strptime(data[i]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
+		ts=calendar.timegm(datetime.datetime.strptime(data[i]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
 		if preTs!=None:
 			if preTs-ts>warningTimeGap*60:
 				print('warning, '+str(tradingPair)+' time interval exceeds warningTimeGap('+str(warningTimeGap)+') '+str(data[i]['T'])+' '+str(data[i+1]['T']))
@@ -296,6 +310,7 @@ def rollingWindow_2(tradingPair,data,histTimeInterval=1,warningTimeGap=60,maxLat
 	#-------------------------------
 	import datetime
 	import time
+	import calendar
 	#import collections as c
 	if tradingPair==None:
 		raise ValueError("erroneous tradingPair: "+str(tradingPair))
@@ -306,10 +321,10 @@ def rollingWindow_2(tradingPair,data,histTimeInterval=1,warningTimeGap=60,maxLat
 	data.sort(key=lambda x:x['T'])
 	print('latest timeStamp: '+str(tradingPair)+' '+str(data[-1]['T']))
 	#check sell signal before everything else
-	currPrice,currTS=data[-1]['C'],time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
+	currPrice,currTS=data[-1]['C'],calendar.timegm(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
 	#read holding position here
 	holdingStatus=getHoldingStatus(tradingPair)
-	sellSignal=sellSig(holdingStatus=holdingStatus,currPrice=currPrice,currTS=currTS,thresholds={'stopLoss':-0.025,'stopPeakLoss':-0.1,'stopGain':1000,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7])
+	sellSignal=sellSig(holdingStatus=holdingStatus,currPrice=currPrice,currTS=currTS,thresholds={'stopLoss':-0.025,'stopPeakLoss':-0.1,'stopGain':1000,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7],gracePeriod=30,gracePeriodStopLoss=-0.1)
 	if sellSignal!=None:
 		return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
 
@@ -319,7 +334,7 @@ def rollingWindow_2(tradingPair,data,histTimeInterval=1,warningTimeGap=60,maxLat
 		raise ValueError('histTimeInterval: '+str(histTimeInterval)+'must be less than warningTimeGap: '+str(warningTimeGap))
 	if maxLatency==None or maxLatency>6:
 		raise ValueError('None maxLatency or maxLatency('+str(maxLatency)+') cannot exceed 6min due to dynamic last timeStamp')
-	if time.time()-currTS>maxLatency*60:
+	if calendar.timegm(datetime.datetime.utcnow().utctimetuple())-currTS>maxLatency*60:
 		print('warning: '+str(tradingPair)+' last update timestamp too old: '+str(data[-1]['T']))
 		return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
 	if len(checkTS)<=0 or len(checkTS)!=len(Pthres) or len(checkTS)<=2:
@@ -330,7 +345,7 @@ def rollingWindow_2(tradingPair,data,histTimeInterval=1,warningTimeGap=60,maxLat
 	if Vtimespan==None or Vtimespan<=0 or Vthres==None:
 		raise ValueError('erroneous Vtimespan('+str(Vtimespan)+') or Vthres('+str(Vthres)+')')
 	Vthres=float(Vthres)
-	if time.mktime(datetime.datetime.strptime(data[0]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())-time.mktime(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())>checkTS[0]*60:
+	if calendar.timegm(datetime.datetime.strptime(data[0]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())-calendar.timegm(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())>checkTS[0]*60:
 		print('history not exceeding desired check timeStamp: '+str(checkTS[0])+' '+str(data[-1]['T'])+' '+str(data[0]['T']))
 		return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
 	#initialization
@@ -343,7 +358,7 @@ def rollingWindow_2(tradingPair,data,histTimeInterval=1,warningTimeGap=60,maxLat
 	lastWindowMax,lastWindowMin=prices[-1],prices[-1]
 	#start loop
 	for i in range(len(data)-2,-1,-1):
-		ts=time.mktime(datetime.datetime.strptime(data[i]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
+		ts=calendar.timegm(datetime.datetime.strptime(data[i]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
 		cp=float(data[i]['C'])
 		if cp<=0:
 			print('warning: erroneous data closing price('+str(cp)+')')
@@ -399,15 +414,16 @@ def rollingWindow_2(tradingPair,data,histTimeInterval=1,warningTimeGap=60,maxLat
 def generateCandidates(marketHistoricalData):
 	import heapq as hq
 	import time
+	import calendar
 	if marketHistoricalData==None:
 		raise ValueError('erroneous marketHistoricalData')
 	buyCand,sellCand=[],[]
 	for pair in marketHistoricalData.keys():
 		ans=rollingWindow_2(tradingPair=pair,data=marketHistoricalData[pair],histTimeInterval=1,warningTimeGap=10,maxLatency=5,checkTS=[-30,-20,-10],Pthres=[0.00001,0.00001,0.00001],Vtimespan=10,Vthres=50,lastPthres=0.05,lastWinMomentumThres=0.2)
 		if ans!=None and ans['buySig']!=None:
-			hq.heappush(buyCand,(-ans['buySig'],{'pair':pair,'twentyFourHourBTCVolume':ans['twentyFourHourBTCVolume'],'peakPrice':ans['peakPrice'],'buyPrice':ans['buyPrice'],'currPrice':ans['currPrice'],'currentTS':time.time()}))
+			hq.heappush(buyCand,(-ans['buySig'],{'pair':pair,'twentyFourHourBTCVolume':ans['twentyFourHourBTCVolume'],'peakPrice':ans['peakPrice'],'buyPrice':ans['buyPrice'],'currPrice':ans['currPrice'],'currentTS':calendar.timegm(datetime.datetime.utcnow().utctimetuple())}))
 		if ans!=None and ans['sellSig']!=None:
-			hq.heappush(sellCand,(-ans['sellSig']['sig'],{'comPrice':ans['sellSig']['comPrice'],'pair':pair,'twentyFourHourBTCVolume':ans['twentyFourHourBTCVolume'],'peakPrice':ans['peakPrice'],'buyPrice':ans['buyPrice'],'currPrice':ans['currPrice'],'currentTS':time.time()}))
+			hq.heappush(sellCand,(-ans['sellSig']['sig'],{'comPrice':ans['sellSig']['comPrice'],'pair':pair,'twentyFourHourBTCVolume':ans['twentyFourHourBTCVolume'],'peakPrice':ans['peakPrice'],'buyPrice':ans['buyPrice'],'currPrice':ans['currPrice'],'currentTS':calendar.timegm(datetime.datetime.utcnow().utctimetuple())}))
 	return (buyCand,sellCand)
 
 
@@ -438,7 +454,7 @@ def generateCandidates(marketHistoricalData):
 
 
 df = pd.DataFrame(data)
-df['ts']=df['T'].apply(lambda x:(time.mktime(datetime.datetime.strptime(x,"%Y-%m-%dT%H:%M:%S").timetuple())))
+df['ts']=df['T'].apply(lambda x:(calendar.timegm(datetime.datetime.strptime(x,"%Y-%m-%dT%H:%M:%S").timetuple())))
 df['buy']=buySignal
 
 ax=df['V'].plot()
