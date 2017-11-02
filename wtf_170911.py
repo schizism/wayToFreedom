@@ -415,6 +415,7 @@ def generateCandidates(marketHistoricalData):
 	import heapq as hq
 	import time
 	import calendar
+	import datetime
 	if marketHistoricalData==None:
 		raise ValueError('erroneous marketHistoricalData')
 	buyCand,sellCand=[],[]
