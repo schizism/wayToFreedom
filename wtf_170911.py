@@ -134,8 +134,10 @@ def buySig(tradingPair,currPrice,prePrice,currRWVolumeSum,preRWVolumeSum,twentyF
 
 
 def sellSig(holdingStatus,currPrice,currTS,thresholds={'stopLoss':-0.07,'stopPeakLoss':-0.1,'stopGain':0.2,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7],gracePeriod=30,gracePeriodStopLoss=-0.1):
-	#{u'TimeStamp': u'2017-09-30 19:45:20.873574', u'HoldingStatus': u'False', u'MarketName': u'BTC-1ST', u'PeakPrice': u'0', u'BuyPrice': u'0'}
 	import sys
+	import calendar
+	import datetime
+	import time
 	if holdingStatus==None or holdingStatus['HoldingStatus']=='False':
 		return None
 	if holdingStatus['BuyPrice']==None or currPrice==None or thresholds==None:
