@@ -105,6 +105,11 @@ def irrExpSmth(data
 
 
 def buySig(tradingPair,currPrice,prePrice,currRWVolumeSum,preRWVolumeSum,twentyFourHourBTCVolume,weights={'V':0.8,'P':0.2},thresholds={'V':1,'P':0.05,'twentyFourHourBTCVolume':300}):
+	import sys
+	import calendar
+	import datetime
+	import time
+
 	if currPrice==None or prePrice==None or twentyFourHourBTCVolume==None:
 		print(currPrice)
 		print(prePrice)
