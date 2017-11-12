@@ -331,7 +331,7 @@ def rollingWindow_2(tradingPair,data,histTimeInterval=1,warningTimeGap=60,maxLat
 	currPrice,currTS=data[-1]['C'],calendar.timegm(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
 	#read holding position here
 	holdingStatus=getHoldingStatus(tradingPair)
-	sellSignal=sellSig(holdingStatus=holdingStatus,currPrice=currPrice,currTS=currTS,thresholds={'stopLoss':-0.025,'stopPeakLoss':-0.1,'stopGain':1000,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7],gracePeriod=30,gracePeriodStopLoss=-0.1)
+	sellSignal=sellSig(holdingStatus=holdingStatus,currPrice=currPrice,currTS=currTS,thresholds={'stopLoss':-0.07,'stopPeakLoss':-0.1,'stopGain':1000,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0,0.1,0.1],gracePeriod=30,gracePeriodStopLoss=-0.07)
 	if sellSignal!=None:
 		return {'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
 
@@ -427,7 +427,7 @@ def generateCandidates(marketHistoricalData):
 		raise ValueError('erroneous marketHistoricalData')
 	buyCand,sellCand=[],[]
 	for pair in marketHistoricalData.keys():
-		ans=rollingWindow_2(tradingPair=pair,data=marketHistoricalData[pair],histTimeInterval=1,warningTimeGap=10,maxLatency=5,checkTS=[-30,-20,-10],Pthres=[0.00001,0.00001,0.00001],Vtimespan=10,Vthres=50,lastPthres=0.05,lastWinMomentumThres=0.2)
+		ans=rollingWindow_2(tradingPair=pair,data=marketHistoricalData[pair],histTimeInterval=1,warningTimeGap=10,maxLatency=5,checkTS=[-15,-10,-5],Pthres=[0.00001,0.00001,0.00001],Vtimespan=5,Vthres=25,lastPthres=0.05,lastWinMomentumThres=0.2)
 		if ans!=None and ans['buySig']!=None:
 			hq.heappush(buyCand,(-ans['buySig'],{'pair':pair,'twentyFourHourBTCVolume':ans['twentyFourHourBTCVolume'],'peakPrice':ans['peakPrice'],'buyPrice':ans['buyPrice'],'currPrice':ans['currPrice'],'currentTS':calendar.timegm(datetime.datetime.utcnow().utctimetuple())}))
 		if ans!=None and ans['sellSig']!=None:
@@ -470,6 +470,20 @@ df['buy'].plot(ax=ax)
 # df['CP']=df['C']*1000000
 # df['CP']
 plt.show()
+
+
+#---------------------
+#---------------------
+return
+
+last min (10 min) volume threshold
+actual last min (10 min) volume
+dynamicBalanceFactor=actualVolume/threshold_volume
+
+
+2 return dynamicBalanceFactor
+1 decouple sell and buy
+3 extract parameters
 
 
 
