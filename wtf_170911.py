@@ -320,10 +320,12 @@ def rollingWindow_2(tradingPair,data,histTimeInterval=1,warningTimeGap=60,maxLat
 	import calendar
 	#import collections as c
 	if tradingPair==None:
-		raise ValueError("erroneous tradingPair: "+str(tradingPair))
+		print("erroneous tradingPair: "+str(tradingPair))
+		return {'dynamicBalanceFactor':None,'buySig':None,'sellSig':None,'twentyFourHourBTCVolume':None,'peakPrice':None,'buyPrice':None,'currPrice':None}
 	if data==None or len(data)<=5:
 		#here need to check with sell logic, for that if data==None, which means we dont have this pair's history, but this doesn't mean it's not trading (due to lag or anything else), if this's the case we may lose the sell signal
-		raise ValueError("erroneous input data: "+str(data))
+		print("erroneous input data: "+str(data))
+		return {'dynamicBalanceFactor':None,'buySig':None,'sellSig':None,'twentyFourHourBTCVolume':None,'peakPrice':None,'buyPrice':None,'currPrice':None}
 	#sort data to make sure its time ascending
 	data.sort(key=lambda x:x['T'])
 	print('latest timeStamp: '+str(tradingPair)+' '+str(data[-1]['T']))
@@ -447,7 +449,7 @@ def generateSellCandidates(marketHistoricalData):
 	for pair in marketHistoricalData.keys():
 		holdingStatus=getHoldingStatus(pair)
 		currTS=calendar.timegm(datetime.datetime.utcnow().utctimetuple())
-		ans=sellSig(holdingStatus=holdingStatus,currPrice=marketHistoricalData['pair']['Last'],currTS=currTS,thresholds={'stopLoss':-0.025,'stopPeakLoss':-0.1,'stopGain':1000,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.3],peakPriceTrailingThreshold=[0,0.1,0.8],gracePeriod=30,gracePeriodStopLoss=-0.025)
+		ans=sellSig(holdingStatus=holdingStatus,currPrice=marketHistoricalData[pair]['Last'],currTS=currTS,thresholds={'stopLoss':-0.025,'stopPeakLoss':-0.1,'stopGain':1000,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.3],peakPriceTrailingThreshold=[0,0.1,0.8],gracePeriod=30,gracePeriodStopLoss=-0.025)
 		if ans!=None and ans['sig']!=None:
 			hq.heappush(sellCand,(-ans['sig'],{'comPrice':ans['comPrice'],'pair':pair,'currentTS':calendar.timegm(datetime.datetime.utcnow().utctimetuple())}))
 	return sellCand
