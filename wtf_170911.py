@@ -331,6 +331,7 @@ def rollingWindow_2(tradingPair,data,histTimeInterval=1,warningTimeGap=60,maxLat
 	print('latest timeStamp: '+str(tradingPair)+' '+str(data[-1]['T']))
 	#check sell signal before everything else
 	currPrice,currTS=data[-1]['C'],calendar.timegm(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
+	startTS=calendar.timegm(datetime.datetime.strptime(data[0]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())
 	#read holding position here
 	holdingStatus=getHoldingStatus(tradingPair)
 	#deprecated, sell and buy are completely seperated
@@ -355,7 +356,7 @@ def rollingWindow_2(tradingPair,data,histTimeInterval=1,warningTimeGap=60,maxLat
 	if Vtimespan==None or Vtimespan<=0 or Vthres==None or Vthres<=0:
 		raise ValueError('erroneous Vtimespan('+str(Vtimespan)+') or Vthres('+str(Vthres)+')')
 	Vthres=float(Vthres)
-	if calendar.timegm(datetime.datetime.strptime(data[0]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())-calendar.timegm(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())>checkTS[0]*60:
+	if startTS-calendar.timegm(datetime.datetime.strptime(data[-1]['T'],"%Y-%m-%dT%H:%M:%S").timetuple())>checkTS[0]*60:
 		print('history not exceeding desired check timeStamp: '+str(checkTS[0])+' '+str(data[-1]['T'])+' '+str(data[0]['T']))
 		return {'dynamicBalanceFactor':None,'buySig':None,'sellSig':sellSignal,'twentyFourHourBTCVolume':None,'peakPrice':(holdingStatus['PeakPrice'] if holdingStatus!=None else None),'buyPrice':(holdingStatus['BuyPrice'] if holdingStatus!=None else None),'currPrice':currPrice}
 	#initialization
@@ -363,7 +364,9 @@ def rollingWindow_2(tradingPair,data,histTimeInterval=1,warningTimeGap=60,maxLat
 	checkTSunix=[currTS+entry*60 for entry in checkTS]
 	checkTSpointer=len(checkTS)-1
 	stopTime=currTS+min(checkTS[0],-1*Vtimespan,-maxPriceTimeSpan)*60
-	BTCVolume,vWindow=data[-1]['V']*float(data[-1]['C']),{'start':currTS-Vtimespan*60,'end':currTS}
+	if startTS>stopTime:
+		print('warning: trading pair '+str(tradingPair)+' oldest record('+str(data[0]['T'])+') not exceeding stopTime('+str(stopTime)+')')
+	BTCVolume,vWindow=float(data[-1]['BV']),{'start':currTS-Vtimespan*60,'end':currTS}
 	preTs=currTS
 	maxPriceTimeSpan_p=float(data[-1]['C'])
 	lastWindowMax,lastWindowMin=prices[-1],prices[-1]
