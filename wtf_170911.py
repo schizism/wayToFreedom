@@ -138,7 +138,7 @@ def buySig(tradingPair,currPrice,prePrice,currRWVolumeSum,preRWVolumeSum,twentyF
 	return vThresholdValue/thresholds['V']*weights['V']+pThresholdValue/thresholds['P']*weights['P']
 
 
-def sellSig(holdingStatus,currPrice,currTS,thresholds={'stopLoss':-0.07,'stopPeakLoss':-0.1,'stopGain':0.2,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7],gracePeriod=30,gracePeriodStopLoss=-0.1):
+def sellSig(holdingStatus,currPrice,currTS,thresholds={'stopLoss':-0.07,'stopPeakLoss':-0.1,'stopGain':0.2,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.2],peakPriceTrailingThreshold=[0.5,0.6,0.7],gracePeriod=30,gracePeriodStopLoss=-0.1,peakPriceTrailingThreshold_grace=[0.5,0.6,0.7]):
 	import sys
 	import calendar
 	import datetime
@@ -151,6 +151,8 @@ def sellSig(holdingStatus,currPrice,currTS,thresholds={'stopLoss':-0.07,'stopPea
 		raise ValueError('erroneous peakPriceTrailingIntervals: '+str(peakPriceTrailingIntervals))
 	if len(peakPriceTrailingThreshold)<=0 or len(peakPriceTrailingThreshold)!=len(peakPriceTrailingIntervals)+1:
 		raise ValueError('erroneous peakPriceTrailingThreshold: '+str(peakPriceTrailingThreshold)+' OR peakPriceTrailingIntervals: '+str(peakPriceTrailingIntervals))
+	if len(peakPriceTrailingThreshold_grace)<=0 or len(peakPriceTrailingThreshold_grace)!=len(peakPriceTrailingIntervals)+1:
+		raise ValueError('erroneous peakPriceTrailingThreshold_grace: '+str(peakPriceTrailingThreshold_grace)+' OR peakPriceTrailingIntervals: '+str(peakPriceTrailingIntervals))
 	if holdingStatus['BuyPrice']<=0 or currPrice<0:
 		raise ValueError('erroneous holdingStatus('+str(holdingStatus)+') OR currPrice('+str(currPrice)+')')
 	if gracePeriod==None or gracePeriod<0:
@@ -165,9 +167,11 @@ def sellSig(holdingStatus,currPrice,currTS,thresholds={'stopLoss':-0.07,'stopPea
 	if currTS-calendar.timegm(datetime.datetime.strptime(holdingStatus['CreatedTimeStamp'],"%Y-%m-%d %H:%M:%S.%f").timetuple())<=gracePeriod*60:
 		if (currPrice-holdingStatus['BuyPrice'])<=gracePeriodStopLoss*holdingStatus['BuyPrice']:
 			return {'sig':sys.maxint,'comPrice':(1-abs(gracePeriodStopLoss))*holdingStatus['BuyPrice']}
+		pPTT=peakPriceTrailingThreshold_grace
 	else:
 		if (currPrice-holdingStatus['BuyPrice'])<=thresholds['stopLoss']*holdingStatus['BuyPrice']:
 			return {'sig':sys.maxint,'comPrice':(1-abs(thresholds['stopLoss']))*holdingStatus['BuyPrice']}
+		pPTT=peakPriceTrailingThreshold
 	# if (currPrice-holdingStatus['PeakPrice'])/holdingStatus['PeakPrice']<=thresholds['stopPeakLoss']:
 	# 	return sys.maxint
 	# if (currPrice-holdingStatus['BuyPrice'])/holdingStatus['BuyPrice']>=thresholds['stopGain']:
@@ -180,12 +184,12 @@ def sellSig(holdingStatus,currPrice,currTS,thresholds={'stopLoss':-0.07,'stopPea
 		risePct=(holdingStatus['PeakPrice']-holdingStatus['BuyPrice'])/holdingStatus['BuyPrice']
 		for i in range(1,len(peakPriceTrailingIntervals)):
 			if peakPriceTrailingIntervals[i-1]<risePct<=peakPriceTrailingIntervals[i]:
-				if peakPriceTrailingThreshold[i-1]>=0:
-					comPrice=(1-peakPriceTrailingThreshold[i-1])*holdingStatus['BuyPrice']+peakPriceTrailingThreshold[i-1]*holdingStatus['PeakPrice']
+				if pPTT[i-1]>=0:
+					comPrice=(1-pPTT[i-1])*holdingStatus['BuyPrice']+pPTT[i-1]*holdingStatus['PeakPrice']
 				else:
-					comPrice=(1+peakPriceTrailingThreshold[i-1])*holdingStatus['BuyPrice']
+					comPrice=(1+pPTT[i-1])*holdingStatus['BuyPrice']
 				if currPrice<=comPrice:
-					print('info: peak price trailing conditions: ',holdingStatus['PeakPrice'],holdingStatus['BuyPrice'],currPrice,peakPriceTrailingIntervals[i-1],peakPriceTrailingIntervals[i],peakPriceTrailingThreshold[i-1],comPrice)
+					print('info: peak price trailing conditions: ',holdingStatus['PeakPrice'],holdingStatus['BuyPrice'],currPrice,peakPriceTrailingIntervals[i-1],peakPriceTrailingIntervals[i],pPTT[i-1],comPrice)
 					return {'sig':sys.maxint,'comPrice':comPrice}
 	# if (currTS - holdingStatus['buyTimeStamp']>thresholds['lowMovementCheckTimeGap']*60) and (floor((currTS - holdingStatus['buyTimeStamp'])/86400) * price change threshold %  > (last price / buy price - 1) )
 	# if holdingStatus['BuyPrice']*holdingStatus['Q']<thresholds['LowPurchaseQuantity']:
@@ -461,7 +465,7 @@ def generateSellCandidates(marketHistoricalData):
 	for pair in marketHistoricalData.keys():
 		holdingStatus=getHoldingStatus(pair)
 		currTS=calendar.timegm(datetime.datetime.utcnow().utctimetuple())
-		ans=sellSig(holdingStatus=holdingStatus,currPrice=marketHistoricalData[pair]['Last'],currTS=currTS,thresholds={'stopLoss':-0.025,'stopPeakLoss':-0.1,'stopGain':1000,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.3],peakPriceTrailingThreshold=[0,0.1,0.8],gracePeriod=30,gracePeriodStopLoss=-0.025)
+		ans=sellSig(holdingStatus=holdingStatus,currPrice=marketHistoricalData[pair]['Last'],currTS=currTS,thresholds={'stopLoss':-0.025,'stopPeakLoss':-0.1,'stopGain':1000,'lowMovementCheckTimeGap':60,'LowPurchaseQuantity':0.001},peakPriceTrailingIntervals=[0.1,0.3],peakPriceTrailingThreshold=[0,0.1,0.8],gracePeriod=30,gracePeriodStopLoss=-0.025,peakPriceTrailingThreshold_grace=[0.5,0.6,0.7])
 		if ans!=None and ans['sig']!=None:
 			hq.heappush(sellCand,(-ans['sig'],{'comPrice':ans['comPrice'],'pair':pair,'currentTS':calendar.timegm(datetime.datetime.utcnow().utctimetuple())}))
 	return sellCand
