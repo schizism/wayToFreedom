@@ -485,7 +485,9 @@ def generateSellCandidates(marketHistoricalData):
 
 
 
-
+http://www.learndatasci.com/python-finance-part-3-moving-average-trading-strategy/
+https://stackoverflow.com/questions/13728392/moving-average-or-running-mean
+https://gordoncluster.wordpress.com/2014/02/13/python-numpy-how-to-generate-moving-averages-efficiently-part-2/
 
 #---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #scratch paper
